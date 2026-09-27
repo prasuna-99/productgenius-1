@@ -1,0 +1,6 @@
+{
+  "name": "ProductGenius",
+  "description": "Luxury boutique e-commerce platform with customer, seller, and admin dashboards powered by an Apriori association rule recommendation engine.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
