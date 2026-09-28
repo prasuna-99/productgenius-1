@@ -19,9 +19,9 @@ export const Footer: React.FC = () => {
           </div>
           <div className="flex flex-col items-center md:items-start gap-2">
             <ShieldCheck className="w-5 h-5 text-[#F2CAC2]" />
-            <h4 className="text-sm font-semibold text-[#FAF7F2]">Verified Artisan Quality</h4>
+            <h4 className="text-sm font-semibold text-[#FAF7F2]">Verified Quality</h4>
             <p className="text-xs text-[#D8B7BE] leading-relaxed">
-              Bespoke silk, aged perfumes, and vegetable-tanned leather curated by atelier merchants.
+              Luxury Skincare, Makeup, Bodycare, and Fragrance curated by boutique merchants in Rs.
             </p>
           </div>
           <div className="flex flex-col items-center md:items-start gap-2">

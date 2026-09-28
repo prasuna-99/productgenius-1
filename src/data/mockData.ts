@@ -1,5 +1,5 @@
-import { Product, User, Transaction, Order } from '../types';
-import { GOOGLE_ADJUSTED_PRODUCTS, INITIAL_PARSED_DATASET, RAW_DATASET_TEXT } from './userDataset';
+import { Product, User, Transaction, Order, Campaign } from '../types';
+import { GOOGLE_ADJUSTED_PRODUCTS, INITIAL_PARSED_DATASET } from './userDataset';
 
 export const INITIAL_USERS: User[] = [
   {
@@ -29,10 +29,10 @@ export const INITIAL_USERS: User[] = [
   },
 ];
 
-// Initial products: 12 Google Search adjusted boutique luxury items
+// Initial products: 40 curated Skincare, Makeup, Bodycare, and Fragrance products
 export const INITIAL_PRODUCTS: Product[] = GOOGLE_ADJUSTED_PRODUCTS;
 
-// Initial transactions: 100+ real transactions parsed from user dataset
+// Initial transactions: 200 clean transactions provided by user
 export const INITIAL_TRANSACTIONS: Transaction[] = INITIAL_PARSED_DATASET.transactions;
 
 export const INITIAL_ORDERS: Order[] = [
@@ -44,39 +44,39 @@ export const INITIAL_ORDERS: Order[] = [
     items: [
       {
         productId: 'pg-skn-01',
-        title: 'De Botanique Hyaluronic Hydrating Cleanser',
-        price: 48,
+        title: 'Botanique Hyaluronic Hydrating Cleanser',
+        price: 1450,
         quantity: 1,
         imageUrl: '/src/assets/images/skincare_cleanser_moisturizer_1790516249925.jpg',
       },
       {
         productId: 'pg-skn-02',
         title: 'Cellular TFC8 Daily Recovery Moisturizer',
-        price: 88,
+        price: 2450,
         quantity: 1,
         imageUrl: '/src/assets/images/skincare_cleanser_moisturizer_1790516249925.jpg',
       },
       {
         productId: 'pg-skn-03',
         title: 'Silk Invisible UV Shield Broad Spectrum SPF50+',
-        price: 54,
+        price: 1650,
         quantity: 1,
         imageUrl: '/src/assets/images/skincare_cleanser_moisturizer_1790516249925.jpg',
       },
     ],
-    subtotal: 190,
+    subtotal: 5550,
     shipping: 0,
-    discount: 19.0,
-    total: 171.0,
+    discount: 555,
+    total: 4995,
     status: 'Shipped',
     date: '2026-09-25',
     shippingAddress: {
-      street: '742 Evergreen Terrace, Apt 4B',
-      city: 'Paris',
-      state: 'Île-de-France',
-      zip: '75008',
+      street: 'Durbar Marg, Heritage Lane 4',
+      city: 'Kathmandu',
+      state: 'Bagmati',
+      zip: '44600',
     },
-    trackingNumber: 'PG-EXP-982104-FR',
+    trackingNumber: 'PG-EXP-982104-NP',
   },
   {
     id: 'ORD-9755',
@@ -85,74 +85,84 @@ export const INITIAL_ORDERS: Order[] = [
     customerEmail: 'elena.rostova@boutique.com',
     items: [
       {
-        productId: 'pg-har-04',
+        productId: 'pg-bdy-24',
         title: 'Gold Lust Botanical Repair & Strengthen Shampoo',
-        price: 56,
+        price: 1750,
         quantity: 1,
         imageUrl: '/src/assets/images/luxury_hair_repair_serum_1790516287700.jpg',
       },
       {
-        productId: 'pg-har-05',
+        productId: 'pg-bdy-25',
         title: 'Deep Moisture Cuticle Repair Conditioner',
-        price: 58,
+        price: 1850,
         quantity: 1,
         imageUrl: '/src/assets/images/luxury_hair_repair_serum_1790516287700.jpg',
       },
     ],
-    subtotal: 114,
+    subtotal: 3600,
     shipping: 0,
-    discount: 0,
-    total: 114.0,
+    discount: 360,
+    total: 3240,
     status: 'Delivered',
     date: '2026-09-20',
     shippingAddress: {
-      street: '742 Evergreen Terrace, Apt 4B',
-      city: 'Paris',
-      state: 'Île-de-France',
-      zip: '75008',
+      street: 'Lakeside Road, Ward 6',
+      city: 'Pokhara',
+      state: 'Gandaki',
+      zip: '33700',
     },
-    trackingNumber: 'PG-EXP-975512-FR',
+    trackingNumber: 'PG-EXP-975512-NP',
+  },
+];
+
+// Initial Festival & Season Campaigns
+export const INITIAL_CAMPAIGNS: Campaign[] = [
+  {
+    id: 'cmp-festive-01',
+    title: 'Grand Diwali & Tihar Festival Gala',
+    type: 'festival',
+    tagline: 'Illuminate Your Radiance with 25% Off on Skincare & Fragrance Pairs',
+    discountCode: 'FESTIVE25',
+    discountPercent: 25,
+    themeColor: 'amber',
+    badgeText: 'Festival Mega Offer',
+    bannerImageUrl: '/src/assets/images/botanical_perfume_rose_1790511914245.jpg',
+    startDate: '2026-09-20',
+    endDate: '2026-10-31',
+    isActive: true,
+    featuredCategory: 'All',
+    description: 'Celebrate the festive season with handcrafted luxury essentials. Enjoy flat 25% savings and accelerated Apriori festival pairing bundles.',
   },
   {
-    id: 'ORD-9610',
-    customerId: 'user-cust-99',
-    customerName: 'Julian Thorne',
-    customerEmail: 'julian.thorne@lifestyle.co',
-    items: [
-      {
-        productId: 'pg-mak-07',
-        title: 'Velvet Soft-Focus Matte Foundation (All-Day Wear)',
-        price: 68,
-        quantity: 1,
-        imageUrl: '/src/assets/images/luxury_matte_foundation_lipstick_1790516270933.jpg',
-      },
-      {
-        productId: 'pg-mak-08',
-        title: 'Pore-Refining Radiance Smoothing Face Primer',
-        price: 46,
-        quantity: 1,
-        imageUrl: '/src/assets/images/luxury_matte_foundation_lipstick_1790516270933.jpg',
-      },
-      {
-        productId: 'pg-mak-09',
-        title: 'Artisanal Plush Precision Makeup Sponge Duo',
-        price: 28,
-        quantity: 1,
-        imageUrl: '/src/assets/images/luxury_matte_foundation_lipstick_1790516270933.jpg',
-      },
-    ],
-    subtotal: 142,
-    shipping: 0,
-    discount: 14.2,
-    total: 127.8,
-    status: 'Processing',
-    date: '2026-09-26',
-    shippingAddress: {
-      street: '12 Kensington Church St',
-      city: 'London',
-      state: 'Greater London',
-      zip: 'W8 4EP',
-    },
-    trackingNumber: 'PG-EXP-961099-GB',
+    id: 'cmp-dashain-02',
+    title: 'Dashain Utsav Festive Bonanza',
+    type: 'festival',
+    tagline: 'Exclusive Festive Elegance: Flat 30% Off on Curated Luxury Makeup',
+    discountCode: 'DASHAIN30',
+    discountPercent: 30,
+    themeColor: 'burgundy',
+    badgeText: 'Festive Special',
+    bannerImageUrl: '/src/assets/images/luxury_matte_foundation_lipstick_1790516270933.jpg',
+    startDate: '2026-09-25',
+    endDate: '2026-10-25',
+    isActive: true,
+    featuredCategory: 'Makeup',
+    description: 'Elevate your festival celebration look with longwear velvet matte foundations, artisanal primers, and couture lipsticks.',
+  },
+  {
+    id: 'cmp-season-03',
+    title: 'Autumn Glow Seasonal Revival',
+    type: 'season',
+    tagline: 'Hydrate & Protect: Flat 20% Off on Skincare & Bodycare Nourishment',
+    discountCode: 'AUTUMN20',
+    discountPercent: 20,
+    themeColor: 'emerald',
+    badgeText: 'Season Offer',
+    bannerImageUrl: '/src/assets/images/skincare_cleanser_moisturizer_1790516249925.jpg',
+    startDate: '2026-09-15',
+    endDate: '2026-11-15',
+    isActive: true,
+    featuredCategory: 'Skincare',
+    description: 'Pre-winter barrier protection formulas. Replenish moisture with hyaluronic cleansers, repair creams, and nourishing botanical oils.',
   },
 ];

@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { X, Trash2, ShoppingBag, ArrowRight, Sparkles, Tag, ShieldCheck } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { formatPrice } from '../utils/format';
+import { ImageWithFallback } from './common/ImageWithFallback';
 
 export const CartDrawer: React.FC = () => {
   const {
@@ -14,6 +16,7 @@ export const CartDrawer: React.FC = () => {
     addToCart,
     setActiveMathModalRule,
     setIsCheckoutModalOpen,
+    activeCampaigns,
   } = useApp();
 
   const [couponCode, setCouponCode] = useState('');
@@ -23,15 +26,28 @@ export const CartDrawer: React.FC = () => {
 
   const handleApplyCoupon = (e: React.FormEvent) => {
     e.preventDefault();
-    if (couponCode.trim().toUpperCase() === 'GENIUS10') {
-      setAppliedCoupon('GENIUS10');
-    } else if (couponCode.trim().toUpperCase() === 'BUNDLE15') {
-      setAppliedCoupon('BUNDLE15');
+    const clean = couponCode.trim().toUpperCase();
+    const camp = activeCampaigns.find(c => c.discountCode.toUpperCase() === clean);
+    if (camp) {
+      setAppliedCoupon(camp.discountCode);
+    } else if (clean === 'GENIUS10' || clean === 'BUNDLE15') {
+      setAppliedCoupon(clean);
     }
   };
 
-  const discountRate = appliedCoupon === 'GENIUS10' ? 0.10 : appliedCoupon === 'BUNDLE15' ? 0.15 : 0;
-  const discountAmount = cartSubtotal * discountRate;
+  let discountRate = 0;
+  if (appliedCoupon) {
+    const camp = activeCampaigns.find(c => c.discountCode === appliedCoupon);
+    if (camp) {
+      discountRate = camp.discountPercent / 100;
+    } else if (appliedCoupon === 'GENIUS10') {
+      discountRate = 0.10;
+    } else if (appliedCoupon === 'BUNDLE15') {
+      discountRate = 0.15;
+    }
+  }
+
+  const discountAmount = Math.round(cartSubtotal * discountRate);
   const finalTotal = Math.max(0, cartSubtotal - discountAmount);
 
   return (
@@ -64,7 +80,7 @@ export const CartDrawer: React.FC = () => {
                 </div>
                 <h3 className="text-sm font-semibold text-[#2D1217]">Your bag is empty</h3>
                 <p className="text-xs text-[#7A5B61] max-w-xs mx-auto">
-                  Explore our curated selection of mulberry silk, artisan fragrances, and calfskin leather goods.
+                  Explore our curated selection of Skincare, Makeup, Bodycare, and Fragrance in Rupees.
                 </p>
                 <button
                   onClick={() => setIsCartOpen(false)}
@@ -80,11 +96,10 @@ export const CartDrawer: React.FC = () => {
                     key={item.product.id}
                     className="p-3 bg-white rounded-xl border border-[#E8DDD8] flex gap-3 shadow-sm"
                   >
-                    <img
+                    <ImageWithFallback
                       src={item.product.imageUrl}
                       alt={item.product.title}
-                      className="w-18 h-18 rounded-lg object-cover border border-[#E8DDD8]"
-                      referrerPolicy="no-referrer"
+                      className="w-18 h-18 rounded-lg border border-[#E8DDD8]"
                     />
 
                     <div className="flex-1 min-w-0 flex flex-col justify-between">
@@ -101,7 +116,7 @@ export const CartDrawer: React.FC = () => {
                           </button>
                         </div>
                         <div className="text-[11px] text-[#7A5B61]">
-                          ${item.product.price.toFixed(2)} each
+                          {formatPrice(item.product.price)} each
                         </div>
                       </div>
 
@@ -125,7 +140,7 @@ export const CartDrawer: React.FC = () => {
                         </div>
 
                         <div className="text-xs font-bold font-mono text-[#5B1423]">
-                          ${(item.product.price * item.quantity).toFixed(2)}
+                          {formatPrice(item.product.price * item.quantity)}
                         </div>
                       </div>
                     </div>
@@ -144,7 +159,7 @@ export const CartDrawer: React.FC = () => {
                   </h4>
                 </div>
                 <p className="text-[11px] text-[#5C4449] mb-3 leading-snug">
-                  Based on items in your bag, these products have the highest co-purchase frequency in our order history:
+                  Based on items in your bag, these products have the highest co-purchase frequency in our 200 transaction history:
                 </p>
 
                 <div className="space-y-2">
@@ -154,18 +169,17 @@ export const CartDrawer: React.FC = () => {
                       className="p-3 bg-[#FCECE9]/60 rounded-xl border border-[#F2CAC2] flex items-center justify-between gap-2"
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
-                        <img
+                        <ImageWithFallback
                           src={rec.recommendedProduct.imageUrl}
                           alt={rec.recommendedProduct.title}
-                          className="w-12 h-12 rounded-lg object-cover border border-[#E8DDD8]"
-                          referrerPolicy="no-referrer"
+                          className="w-12 h-12 rounded-lg border border-[#E8DDD8]"
                         />
                         <div className="min-w-0">
                           <h5 className="text-xs font-semibold text-[#2D1217] truncate">
                             {rec.recommendedProduct.title}
                           </h5>
                           <div className="text-xs font-mono font-bold text-[#5B1423]">
-                            ${rec.recommendedProduct.price.toFixed(2)}
+                            {formatPrice(rec.recommendedProduct.price)}
                           </div>
                           <div className="text-[10px] text-[#7A1C30]">
                             {rec.confidencePercent}% Confidence · {rec.supportPercent}% Support
@@ -202,10 +216,10 @@ export const CartDrawer: React.FC = () => {
               <form onSubmit={handleApplyCoupon} className="flex gap-2">
                 <input
                   type="text"
-                  placeholder="Coupon code (e.g. GENIUS10)"
+                  placeholder="Coupon code (e.g. FESTIVE25)"
                   value={couponCode}
-                  onChange={e => setCouponCode(e.target.value)}
-                  className="flex-1 px-3 py-1.5 text-xs bg-[#FAF7F2] border border-[#E8DDD8] rounded-lg text-[#2D1217] focus:outline-none focus:ring-1 focus:ring-[#7A1C30]"
+                  onChange={e => setCouponCode(e.target.value.toUpperCase())}
+                  className="flex-1 px-3 py-1.5 text-xs bg-[#FAF7F2] border border-[#E8DDD8] rounded-lg text-[#2D1217] uppercase font-mono tracking-wider focus:outline-none focus:ring-1 focus:ring-[#7A1C30]"
                 />
                 <button
                   type="submit"
@@ -217,20 +231,20 @@ export const CartDrawer: React.FC = () => {
 
               {appliedCoupon && (
                 <div className="text-[11px] text-emerald-700 flex items-center gap-1">
-                  <Tag className="w-3 h-3" /> Coupon applied: <strong>{appliedCoupon}</strong> ({appliedCoupon === 'GENIUS10' ? '10% off' : '15% off'})
+                  <Tag className="w-3 h-3" /> Coupon active: <strong>{appliedCoupon}</strong> ({(discountRate * 100).toFixed(0)}% off)
                 </div>
               )}
 
-              {/* Order Calculations */}
+              {/* Order Calculations in Rs */}
               <div className="space-y-1.5 text-xs text-[#5C4449]">
                 <div className="flex justify-between">
                   <span>Subtotal</span>
-                  <span className="font-mono">${cartSubtotal.toFixed(2)}</span>
+                  <span className="font-mono">{formatPrice(cartSubtotal)}</span>
                 </div>
                 {discountAmount > 0 && (
                   <div className="flex justify-between text-emerald-700 font-medium">
                     <span>Discount</span>
-                    <span className="font-mono">-${discountAmount.toFixed(2)}</span>
+                    <span className="font-mono">-{formatPrice(discountAmount)}</span>
                   </div>
                 )}
                 <div className="flex justify-between">
@@ -238,8 +252,8 @@ export const CartDrawer: React.FC = () => {
                   <span className="text-emerald-700 font-medium">Complimentary</span>
                 </div>
                 <div className="pt-2 border-t border-[#E8DDD8] flex justify-between text-sm font-bold text-[#2D1217]">
-                  <span>Total</span>
-                  <span className="font-mono text-[#5B1423] text-base">${finalTotal.toFixed(2)}</span>
+                  <span>Total Amount</span>
+                  <span className="font-mono text-[#5B1423] text-base">{formatPrice(finalTotal)}</span>
                 </div>
               </div>
 
@@ -257,7 +271,7 @@ export const CartDrawer: React.FC = () => {
 
               <div className="flex items-center justify-center gap-1.5 text-[10px] text-[#7A5B61] text-center pt-1">
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-700" />
-                <span>Encrypted checkout · Orders dynamically enrich Apriori rules</span>
+                <span>Encrypted checkout · Orders in Rupees (Rs)</span>
               </div>
             </div>
           )}

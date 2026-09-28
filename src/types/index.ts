@@ -10,12 +10,14 @@ export interface User {
   joinedDate: string;
 }
 
+export type ProductCategory = 'Skincare' | 'Makeup' | 'Bodycare' | 'Fragrance' | string;
+
 export interface Product {
   id: string;
   title: string;
-  category: 'Fragrance & Bath' | 'Apparel & Silk' | 'Leather Goods' | 'Home & Ambiance' | 'Gourmet & Cellar';
-  price: number;
-  originalPrice?: number;
+  category: ProductCategory;
+  price: number; // In Rs
+  originalPrice?: number; // In Rs
   rating: number;
   reviewsCount: number;
   inStock: boolean;
@@ -68,6 +70,24 @@ export interface Order {
     zip: string;
   };
   trackingNumber: string;
+}
+
+// Festival & Season Campaign Types
+export interface Campaign {
+  id: string;
+  title: string;
+  type: 'festival' | 'season';
+  tagline: string;
+  discountCode: string;
+  discountPercent: number;
+  themeColor: 'burgundy' | 'amber' | 'emerald' | 'rose' | 'indigo' | 'purple';
+  badgeText: string;
+  bannerImageUrl?: string;
+  startDate: string;
+  endDate: string;
+  isActive: boolean;
+  featuredCategory: 'All' | 'Skincare' | 'Makeup' | 'Bodycare' | 'Fragrance';
+  description: string;
 }
 
 // Apriori & Association Rule Types

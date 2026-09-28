@@ -11,45 +11,50 @@ import {
   CheckCircle,
   Clock,
   ArrowRight,
+  Gift,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Product } from '../../types';
 import { GeniusRecommendationsView } from './GeniusRecommendationsView';
+import { CampaignShowcase } from './CampaignShowcase';
+import { formatPrice } from '../../utils/format';
+import { ImageWithFallback } from '../common/ImageWithFallback';
 
 export const CustomerView: React.FC = () => {
   const {
     products,
     cart,
     addToCart,
+    instantOrder,
     wishlist,
     toggleWishlist,
     orders,
+    updateOrderStatus,
+    deliveryNotification,
+    setDeliveryNotification,
     currentUser,
     setSelectedProductDetail,
     activeCustomerTab,
     setActiveCustomerTab,
     topRecommendations,
     setActiveMathModalRule,
+    activeCampaigns,
   } = useApp();
 
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [sortBy, setSortBy] = useState<'featured' | 'price-asc' | 'price-desc' | 'rating'>('featured');
 
-  const categories = [
-    'All',
-    'Fragrance & Bath',
-    'Apparel & Silk',
-    'Leather Goods',
-    'Home & Ambiance',
-    'Gourmet & Cellar',
-  ];
+  // Core 4 Categories
+  const categories = ['All', 'Skincare', 'Makeup', 'Bodycare', 'Fragrance'];
 
   // Filtered & sorted products
   const filteredProducts = useMemo(() => {
     return products
       .filter(p => {
-        const matchesCat = selectedCategory === 'All' || p.category === selectedCategory;
+        const matchesCat =
+          selectedCategory === 'All' ||
+          p.category.toLowerCase() === selectedCategory.toLowerCase();
         const matchesQuery =
           p.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
           p.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -73,10 +78,44 @@ export const CustomerView: React.FC = () => {
   const wishlistedProducts = products.filter(p => wishlist.includes(p.id));
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
       
+      {/* Real-time Delivery Toast */}
+      {deliveryNotification && (
+        <div className="p-4 bg-[#5B1423] text-white rounded-2xl border border-[#7A1C30] shadow-xl flex items-center justify-between gap-4 animate-in fade-in duration-300">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/40">
+              <CheckCircle className="w-5 h-5 text-emerald-300" />
+            </div>
+            <div>
+              <span className="font-semibold text-xs tracking-wide uppercase text-[#F2CAC2] block">
+                Apriori Transaction Ingestion Event
+              </span>
+              <p className="text-xs text-white/95 leading-snug">
+                {deliveryNotification}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setDeliveryNotification(null)}
+            className="text-[#F2CAC2] hover:text-white transition-colors cursor-pointer text-xs font-semibold px-2 py-1 rounded"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      {/* 1. Below Navbar: Active Festival & Season Offer Campaign Showcase */}
+      <CampaignShowcase
+        variant="navbar-banner"
+        onFilterCategory={(cat) => {
+          setSelectedCategory(cat);
+          setActiveCustomerTab('storefront');
+        }}
+      />
+
       {/* Customer Space Navigation Tabs */}
-      <div className="flex items-center gap-2 border-b border-[#E8DDD8] pb-4 mb-8 overflow-x-auto">
+      <div className="flex items-center gap-2 border-b border-[#E8DDD8] pb-4 mb-6 overflow-x-auto">
         <button
           onClick={() => setActiveCustomerTab('storefront')}
           className={`px-4 py-2 text-xs font-semibold uppercase tracking-wider rounded-lg transition-colors cursor-pointer whitespace-nowrap ${
@@ -133,7 +172,7 @@ export const CustomerView: React.FC = () => {
               Order History & Tracking
             </h2>
             <p className="text-xs text-[#5C4449] mt-1">
-              Track deliveries, review item receipts, and monitor status updates.
+              Track deliveries, review item receipts in Rs, and view status history.
             </p>
           </div>
 
@@ -182,7 +221,7 @@ export const CustomerView: React.FC = () => {
                         {order.status}
                       </span>
                       <span className="text-base font-bold font-mono text-[#2D1217]">
-                        ${order.total.toFixed(2)}
+                        {formatPrice(order.total)}
                       </span>
                     </div>
                   </div>
@@ -212,27 +251,44 @@ export const CustomerView: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Items summary */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                  {/* Items in order */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 pt-2">
                     {order.items.map(item => (
                       <div
                         key={item.productId}
-                        className="flex items-center gap-3 p-2.5 rounded-lg bg-[#FAF7F2] border border-[#E8DDD8]"
+                        className="flex items-center gap-3 p-2.5 bg-[#FAF7F2] rounded-xl border border-[#E8DDD8]"
                       >
-                        <img
+                        <ImageWithFallback
                           src={item.imageUrl}
                           alt={item.title}
-                          className="w-12 h-12 rounded object-cover border border-[#E8DDD8]"
-                          referrerPolicy="no-referrer"
+                          className="w-12 h-12 rounded-lg"
                         />
-                        <div className="min-w-0 flex-1">
+                        <div className="min-w-0">
                           <h5 className="text-xs font-semibold text-[#2D1217] truncate">{item.title}</h5>
-                          <div className="text-[11px] text-[#7A5B61]">
-                            {item.quantity} × ${item.price.toFixed(2)}
+                          <div className="text-[11px] text-[#7A5B61]">Qty: {item.quantity}</div>
+                          <div className="text-xs font-mono font-bold text-[#5B1423]">
+                            {formatPrice(item.price * item.quantity)}
                           </div>
                         </div>
                       </div>
                     ))}
+                  </div>
+
+                  {/* Order receipt footer */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-[#F5EBE6] text-xs">
+                    <div className="text-[11px] text-[#7A5B61]">
+                      Shipping to: {order.shippingAddress.street}, {order.shippingAddress.city}, {order.shippingAddress.state} {order.shippingAddress.zip}
+                    </div>
+
+                    {order.status !== 'Delivered' && (
+                      <button
+                        onClick={() => updateOrderStatus(order.id, 'Delivered')}
+                        className="py-1.5 px-3 bg-[#5B1423] hover:bg-[#7A1C30] text-white text-xs font-semibold rounded-lg shadow-sm transition-colors flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
+                      >
+                        <CheckCircle className="w-3.5 h-3.5 text-[#F2CAC2]" />
+                        <span>Confirm Delivery Received</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -248,7 +304,7 @@ export const CustomerView: React.FC = () => {
               Saved Wishlist ({wishlistedProducts.length})
             </h2>
             <p className="text-xs text-[#5C4449] mt-1">
-              Your curated collection of favorite pieces awaiting acquisition.
+              Your curated collection of favorite pieces awaiting acquisition in Rs.
             </p>
           </div>
 
@@ -271,31 +327,38 @@ export const CustomerView: React.FC = () => {
                     onClick={() => setSelectedProductDetail(product)}
                     className="cursor-pointer"
                   >
-                    <img
+                    <ImageWithFallback
                       src={product.imageUrl}
                       alt={product.title}
-                      className="w-full h-56 object-cover"
-                      referrerPolicy="no-referrer"
+                      className="w-full h-56"
                     />
                     <div className="p-4 space-y-1">
-                      <div className="text-[11px] text-[#7A5B61] uppercase tracking-wider">
+                      <div className="text-[11px] text-[#7A5B61] uppercase tracking-wider font-semibold">
                         {product.category}
                       </div>
                       <h4 className="text-sm font-semibold text-[#2D1217] truncate">
                         {product.title}
                       </h4>
                       <div className="text-sm font-mono font-bold text-[#5B1423]">
-                        ${product.price.toFixed(2)}
+                        {formatPrice(product.price)}
                       </div>
                     </div>
                   </div>
 
-                  <div className="p-4 pt-0 flex gap-2">
+                  <div className="p-4 pt-0 flex items-center gap-2">
                     <button
                       onClick={() => addToCart(product, 1)}
-                      className="flex-1 py-2 px-3 bg-[#5B1423] hover:bg-[#7A1C30] text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+                      className="flex-1 py-2 px-2.5 bg-white hover:bg-[#FAF7F2] text-[#5B1423] border border-[#E8DDD8] text-xs font-semibold rounded-lg transition-colors cursor-pointer flex items-center justify-center gap-1 shadow-xs"
                     >
-                      Move to Bag
+                      <ShoppingBag className="w-3.5 h-3.5" />
+                      <span>Bag</span>
+                    </button>
+                    <button
+                      onClick={() => instantOrder(product, 1)}
+                      className="flex-1 py-2 px-2.5 bg-[#5B1423] hover:bg-[#7A1C30] text-white text-xs font-semibold uppercase tracking-wider rounded-lg transition-colors cursor-pointer flex items-center justify-center gap-1 shadow-sm"
+                    >
+                      <CheckCircle className="w-3.5 h-3.5 text-[#F2CAC2]" />
+                      <span>Order Now</span>
                     </button>
                     <button
                       onClick={() => toggleWishlist(product.id)}
@@ -313,14 +376,14 @@ export const CustomerView: React.FC = () => {
       )}
 
       {activeCustomerTab === 'storefront' && (
-        <div className="space-y-12">
+        <div className="space-y-10">
           
-          {/* Storefront Hero */}
+          {/* Storefront Hero with Explore Apriori Action */}
           <div className="bg-[#FAF7F2] rounded-3xl border border-[#E8DDD8] p-8 sm:p-12 relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-8">
             <div className="max-w-xl space-y-4">
               <div className="inline-flex items-center gap-2 bg-[#FCECE9] px-3 py-1 rounded-full text-xs text-[#5B1423] font-semibold border border-[#F2CAC2]">
                 <Sparkles className="w-3.5 h-3.5 text-[#5B1423]" />
-                <span>Intelligent Retail Powered by Apriori Association Rules</span>
+                <span>Intelligent Retail Powered by 200 Transaction Apriori Rules</span>
               </div>
 
               <h1 className="font-display text-4xl sm:text-5xl font-semibold tracking-tight text-[#2D1217] leading-tight">
@@ -328,13 +391,13 @@ export const CustomerView: React.FC = () => {
               </h1>
 
               <p className="text-sm text-[#5C4449] leading-relaxed">
-                Discover exceptional mulberry silk, hand-poured botanical candles, and vegetable-tanned leather goods. As you shop, our Apriori engine continuously analyzes collective checkout affinities to surface high-confidence recommendations.
+                Discover exceptional Skincare, Makeup, Bodycare, and Fragrance. Our Apriori engine continuously analyzes collective checkout affinities to surface high-confidence recommendations.
               </p>
 
-              <div className="pt-2 flex items-center gap-4">
+              <div className="pt-2 flex flex-wrap items-center gap-4">
                 <button
                   onClick={() => setActiveCustomerTab('recommendations')}
-                  className="px-6 py-3 bg-[#5B1423] hover:bg-[#7A1C30] text-white text-xs font-semibold uppercase tracking-wider rounded-lg shadow-md transition-colors flex items-center gap-2 cursor-pointer"
+                  className="px-6 py-3 bg-[#5B1423] hover:bg-[#7A1C30] text-white text-xs font-semibold uppercase tracking-wider rounded-xl shadow-md transition-colors flex items-center gap-2 cursor-pointer"
                 >
                   <Sparkles className="w-4 h-4 text-[#F2CAC2]" />
                   <span>Explore Apriori Recommendations</span>
@@ -344,21 +407,26 @@ export const CustomerView: React.FC = () => {
 
             {/* Hero Image Showcase */}
             <div className="w-full md:w-80 h-72 rounded-2xl overflow-hidden border border-[#E8DDD8] shadow-lg bg-white relative">
-              <img
+              <ImageWithFallback
                 src={products[0]?.imageUrl}
-                alt="ProductGenius Featured Silk"
-                className="w-full h-full object-cover"
-                referrerPolicy="no-referrer"
+                alt="Featured Atelier Piece"
+                className="w-full h-full"
               />
-              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-4 text-white">
+              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/45 to-transparent p-4 text-white">
                 <span className="text-[10px] uppercase tracking-wider font-semibold text-[#F2CAC2]">
-                  Featured Atelier Piece
+                  Featured Piece · {products[0]?.category}
                 </span>
                 <div className="text-xs font-semibold truncate">{products[0]?.title}</div>
-                <div className="text-xs font-mono font-bold text-[#FAF7F2]">${products[0]?.price.toFixed(2)}</div>
+                <div className="text-xs font-mono font-bold text-[#FAF7F2]">
+                  {formatPrice(products[0]?.price)}
+                </div>
               </div>
             </div>
           </div>
+
+          {/* 2. Around the Explore Apriori Recommendation: Festival & Season Campaign Spotlight */}
+          {/* User Request: "visible in customer dashboard around the explore apriori recommendation instead of what is existing right now (the recently add product)" */}
+          <CampaignShowcase variant="apriori-spotlight" />
 
           {/* Quick Apriori Highlight Ribbon */}
           {topRecommendations.length > 0 && (
@@ -372,7 +440,7 @@ export const CustomerView: React.FC = () => {
                     Highest Support & Confidence Apriori Match
                   </h4>
                   <p className="text-xs text-[#5C4449]">
-                    Customers who ordered <strong>{topRecommendations[0].basedOnProducts[0]?.title}</strong> also co-purchased <strong>{topRecommendations[0].recommendedProduct.title}</strong> with {topRecommendations[0].confidencePercent}% confidence!
+                    Customers who bought <strong>{topRecommendations[0].basedOnProducts[0]?.title}</strong> also co-purchased <strong>{topRecommendations[0].recommendedProduct.title}</strong> with {topRecommendations[0].confidencePercent}% confidence!
                   </p>
                 </div>
               </div>
@@ -386,28 +454,35 @@ export const CustomerView: React.FC = () => {
                 </button>
                 <button
                   onClick={() => addToCart(topRecommendations[0].recommendedProduct, 1)}
-                  className="px-4 py-1.5 bg-[#5B1423] hover:bg-[#7A1C30] text-white text-xs font-semibold rounded-lg shadow-sm transition-colors cursor-pointer"
+                  className="px-3 py-1.5 bg-white hover:bg-[#FAF7F2] text-[#5B1423] border border-[#E8DDD8] text-xs font-semibold rounded-lg shadow-xs transition-colors cursor-pointer"
                 >
-                  + Add (${topRecommendations[0].recommendedProduct.price.toFixed(2)})
+                  + Add ({formatPrice(topRecommendations[0].recommendedProduct.price)})
+                </button>
+                <button
+                  onClick={() => instantOrder(topRecommendations[0].recommendedProduct, 1)}
+                  className="px-3.5 py-1.5 bg-[#5B1423] hover:bg-[#7A1C30] text-white text-xs font-semibold uppercase tracking-wider rounded-lg shadow-sm transition-colors flex items-center gap-1 cursor-pointer"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-[#F2CAC2]" />
+                  <span>Order Now</span>
                 </button>
               </div>
             </div>
           )}
 
-          {/* Filter & Search Bar */}
+          {/* Filter & Search Bar with the 4 Categories */}
           <div className="space-y-4">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               
-              {/* Category Filter Tabs */}
-              <div className="flex items-center gap-1.5 overflow-x-auto p-1 bg-white rounded-xl border border-[#E8DDD8]">
+              {/* Category Filter Tabs: Skincare, Makeup, Bodycare, Fragrance */}
+              <div className="flex items-center gap-1.5 overflow-x-auto p-1.5 bg-white rounded-xl border border-[#E8DDD8]">
                 {categories.map(cat => (
                   <button
                     key={cat}
                     onClick={() => setSelectedCategory(cat)}
-                    className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors cursor-pointer whitespace-nowrap ${
-                      selectedCategory === cat
+                    className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-colors cursor-pointer whitespace-nowrap ${
+                      selectedCategory.toLowerCase() === cat.toLowerCase()
                         ? 'bg-[#5B1423] text-white shadow-sm'
-                        : 'text-[#5C4449] hover:text-[#5B1423]'
+                        : 'text-[#5C4449] hover:text-[#5B1423] hover:bg-[#FAF7F2]'
                     }`}
                   >
                     {cat}
@@ -421,7 +496,7 @@ export const CustomerView: React.FC = () => {
                   <Search className="w-4 h-4 text-[#7A5B61] absolute left-3 top-1/2 -translate-y-1/2" />
                   <input
                     type="text"
-                    placeholder="Search boutique items..."
+                    placeholder="Search Skincare, Makeup..."
                     value={searchQuery}
                     onChange={e => setSearchQuery(e.target.value)}
                     className="pl-9 pr-3 py-1.5 text-xs bg-white border border-[#E8DDD8] rounded-lg text-[#2D1217] focus:outline-none focus:ring-1 focus:ring-[#7A1C30] w-48 sm:w-60"
@@ -434,8 +509,8 @@ export const CustomerView: React.FC = () => {
                   className="px-3 py-1.5 text-xs bg-white border border-[#E8DDD8] rounded-lg text-[#5C4449] focus:outline-none focus:ring-1 focus:ring-[#7A1C30] cursor-pointer"
                 >
                   <option value="featured">Featured First</option>
-                  <option value="price-asc">Price: Low to High</option>
-                  <option value="price-desc">Price: High to Low</option>
+                  <option value="price-asc">Price (Rs): Low to High</option>
+                  <option value="price-desc">Price (Rs): High to Low</option>
                   <option value="rating">Highest Rated</option>
                 </select>
               </div>
@@ -458,11 +533,10 @@ export const CustomerView: React.FC = () => {
                         onClick={() => setSelectedProductDetail(product)}
                         className="relative h-64 overflow-hidden bg-[#FAF7F2] cursor-pointer"
                       >
-                        <img
+                        <ImageWithFallback
                           src={product.imageUrl}
                           alt={product.title}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                          referrerPolicy="no-referrer"
+                          className="w-full h-full group-hover:scale-105 transition-transform duration-300"
                         />
                         <button
                           onClick={e => {
@@ -486,7 +560,9 @@ export const CustomerView: React.FC = () => {
                       {/* Content & Metadata */}
                       <div className="p-4 space-y-2">
                         <div className="flex items-center justify-between text-[11px] text-[#7A5B61]">
-                          <span className="uppercase tracking-wider font-medium">{product.category}</span>
+                          <span className="uppercase tracking-wider font-bold text-[#5B1423]">
+                            {product.category}
+                          </span>
                           <span className="flex items-center gap-1 text-amber-700">
                             <Star className="w-3.5 h-3.5 fill-current text-amber-500" />
                             <span className="font-bold">{product.rating}</span>
@@ -516,23 +592,35 @@ export const CustomerView: React.FC = () => {
                     {/* Bottom Purchase Bar */}
                     <div className="p-4 pt-0 border-t border-[#F5EBE6] flex items-center justify-between mt-2">
                       <div className="flex items-baseline gap-1.5">
-                        <span className="text-lg font-bold font-mono text-[#5B1423]">
-                          ${product.price.toFixed(2)}
+                        <span className="text-base font-bold font-mono text-[#5B1423]">
+                          {formatPrice(product.price)}
                         </span>
                         {product.originalPrice && (
                           <span className="text-xs text-[#7A5B61] line-through font-mono">
-                            ${product.originalPrice.toFixed(2)}
+                            {formatPrice(product.originalPrice)}
                           </span>
                         )}
                       </div>
 
-                      <button
-                        onClick={() => addToCart(product, 1)}
-                        className="py-1.5 px-3 bg-[#5B1423] hover:bg-[#7A1C30] text-white text-xs font-semibold uppercase tracking-wider rounded-lg shadow-sm transition-colors flex items-center gap-1.5 cursor-pointer"
-                      >
-                        <ShoppingBag className="w-3.5 h-3.5" />
-                        <span>Add</span>
-                      </button>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => addToCart(product, 1)}
+                          className="py-1.5 px-2.5 bg-white hover:bg-[#FAF7F2] text-[#5B1423] border border-[#E8DDD8] text-xs font-semibold rounded-lg shadow-xs transition-colors flex items-center gap-1 cursor-pointer"
+                          title="Add to shopping bag"
+                        >
+                          <ShoppingBag className="w-3.5 h-3.5" />
+                          <span>Add</span>
+                        </button>
+
+                        <button
+                          onClick={() => instantOrder(product, 1)}
+                          className="py-1.5 px-3 bg-[#5B1423] hover:bg-[#7A1C30] text-white text-xs font-semibold uppercase tracking-wider rounded-lg shadow-sm transition-colors flex items-center gap-1 cursor-pointer"
+                          title="Instant order checkout in Rs"
+                        >
+                          <CheckCircle className="w-3.5 h-3.5 text-[#F2CAC2]" />
+                          <span>Order</span>
+                        </button>
+                      </div>
                     </div>
 
                   </div>

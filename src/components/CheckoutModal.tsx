@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { X, CheckCircle, ShieldCheck, ArrowRight, Sparkles } from 'lucide-react';
+import { X, CheckCircle, ArrowRight, ShoppingBag, Truck } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { formatPrice } from '../utils/format';
 
 export const CheckoutModal: React.FC = () => {
   const {
@@ -10,26 +11,30 @@ export const CheckoutModal: React.FC = () => {
     cartSubtotal,
     placeOrder,
     setActiveCustomerTab,
+    activeCampaigns,
   } = useApp();
 
-  const [street, setStreet] = useState('742 Evergreen Terrace, Suite 4B');
-  const [city, setCity] = useState('Paris');
-  const [state, setState] = useState('Île-de-France');
-  const [zip, setZip] = useState('75008');
+  const [street, setStreet] = useState('Durbar Marg, Heritage Square 4');
+  const [city, setCity] = useState('Kathmandu');
+  const [state, setState] = useState('Bagmati');
+  const [zip, setZip] = useState('44600');
+  const [couponCode, setCouponCode] = useState(
+    activeCampaigns.length > 0 ? activeCampaigns[0].discountCode : ''
+  );
   const [placedOrderInfo, setPlacedOrderInfo] = useState<{ id: string; tracking: string } | null>(null);
 
   if (!isCheckoutModalOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const order = placeOrder({ street, city, state, zip });
+    const order = placeOrder({ street, city, state, zip }, couponCode);
     setPlacedOrderInfo({ id: order.id, tracking: order.trackingNumber });
   };
 
-  const handleFinish = () => {
+  const handleFinish = (targetTab: 'orders' | 'storefront' = 'orders') => {
     setPlacedOrderInfo(null);
     setIsCheckoutModalOpen(false);
-    setActiveCustomerTab('orders');
+    setActiveCustomerTab(targetTab);
   };
 
   return (
@@ -47,47 +52,58 @@ export const CheckoutModal: React.FC = () => {
             </button>
           )}
           <span className="font-display text-2xl font-semibold tracking-tight block">
-            {placedOrderInfo ? 'Order Confirmed' : 'Artisanal Checkout'}
+            {placedOrderInfo ? 'Order Confirmed' : 'Boutique Checkout'}
           </span>
           <p className="text-xs text-[#F2CAC2] mt-1">
             {placedOrderInfo
-              ? 'Thank you for your patronage. Your basket is being prepared for dispatch.'
-              : 'Complete your delivery information for insured white-glove shipping.'}
+              ? 'Thank you for your order. Your items are being prepared for dispatch.'
+              : 'Complete your delivery destination for expedited, insured shipping in Rs.'}
           </p>
         </div>
 
         {/* Content */}
         <div className="p-6">
           {placedOrderInfo ? (
-            <div className="text-center py-6 space-y-4">
-              <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-800 mx-auto flex items-center justify-center">
+            <div className="text-center py-6 space-y-5">
+              <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-800 mx-auto flex items-center justify-center shadow-inner">
                 <CheckCircle className="w-8 h-8" />
               </div>
               <div>
                 <h3 className="font-display text-2xl font-semibold text-[#2D1217]">
-                  Order {placedOrderInfo.id} Confirmed
+                  Order {placedOrderInfo.id} Successfully Placed
                 </h3>
                 <p className="text-xs text-[#5C4449] mt-1">
                   Tracking Reference: <strong className="font-mono text-[#5B1423]">{placedOrderInfo.tracking}</strong>
                 </p>
               </div>
 
-              {/* Apriori Integration Note */}
-              <div className="p-4 bg-[#FCECE9] rounded-xl border border-[#F2CAC2] text-left text-xs text-[#5B1423] space-y-1">
-                <div className="font-semibold flex items-center gap-1.5">
-                  <Sparkles className="w-4 h-4" /> Market Basket Live Feed
+              <div className="p-4 bg-white rounded-xl border border-[#E8DDD8] text-left text-xs text-[#5C4449] space-y-2">
+                <div className="flex items-center gap-2 text-emerald-800 font-semibold">
+                  <Truck className="w-4 h-4 text-emerald-600" />
+                  <span>Dispatch in Progress</span>
                 </div>
-                <p className="text-[#5C4449] text-[11px] leading-relaxed">
-                  Your purchase combination was appended to the <strong>ProductGenius Apriori Transaction Database</strong>. Future customer recommendations will now incorporate this basket's frequent itemset affinities.
+                <p className="text-[11px] leading-relaxed">
+                  Your order is currently <strong>Processing</strong>. You can follow live transit updates, view order receipts, and track dispatch milestones directly in your order history.
                 </p>
               </div>
 
-              <div className="pt-4">
+              {/* Clean user navigation actions */}
+              <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
                 <button
-                  onClick={handleFinish}
-                  className="px-6 py-2.5 bg-[#5B1423] hover:bg-[#7A1C30] text-white text-xs font-semibold uppercase tracking-wider rounded-lg shadow-md transition-colors cursor-pointer"
+                  type="button"
+                  onClick={() => handleFinish('orders')}
+                  className="w-full sm:w-auto px-6 py-2.5 bg-[#5B1423] hover:bg-[#7A1C30] text-white text-xs font-semibold uppercase tracking-wider rounded-lg shadow-md transition-colors cursor-pointer flex items-center justify-center gap-2"
                 >
-                  View in My Orders
+                  <ShoppingBag className="w-4 h-4 text-[#F2CAC2]" />
+                  <span>View in My Orders</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleFinish('storefront')}
+                  className="w-full sm:w-auto px-5 py-2.5 bg-white hover:bg-[#FCECE9] text-[#5B1423] border border-[#E8DDD8] text-xs font-semibold uppercase tracking-wider rounded-lg shadow-xs transition-colors cursor-pointer"
+                >
+                  Continue Shopping
                 </button>
               </div>
             </div>
@@ -97,21 +113,48 @@ export const CheckoutModal: React.FC = () => {
               {/* Order Summary Recap */}
               <div className="p-3.5 bg-white rounded-xl border border-[#E8DDD8] space-y-2 text-xs">
                 <div className="font-semibold text-[#7A5B61] uppercase tracking-wider text-[10px]">
-                  Bag Breakdown ({cart.length} unique items)
+                  Order Items ({cart.length} item{cart.length !== 1 ? 's' : ''})
                 </div>
-                <div className="max-h-28 overflow-y-auto space-y-1 pr-2">
+                <div className="max-h-28 overflow-y-auto space-y-1.5 pr-2">
                   {cart.map(item => (
-                    <div key={item.product.id} className="flex justify-between text-[#2D1217]">
-                      <span className="truncate max-w-[260px]">
+                    <div key={item.product.id} className="flex justify-between items-center text-[#2D1217]">
+                      <span className="truncate max-w-[280px]">
                         {item.quantity}x {item.product.title}
                       </span>
-                      <span className="font-mono font-medium">${(item.product.price * item.quantity).toFixed(2)}</span>
+                      <span className="font-mono font-medium text-[#5B1423]">
+                        {formatPrice(item.product.price * item.quantity)}
+                      </span>
                     </div>
                   ))}
                 </div>
                 <div className="pt-2 border-t border-[#E8DDD8] flex justify-between font-bold text-sm text-[#5B1423]">
-                  <span>Total Due</span>
-                  <span className="font-mono">${cartSubtotal.toFixed(2)}</span>
+                  <span>Total Amount</span>
+                  <span className="font-mono text-base">{formatPrice(cartSubtotal)}</span>
+                </div>
+              </div>
+
+              {/* Coupon / Campaign Code */}
+              <div>
+                <label className="block text-[11px] font-semibold text-[#7A5B61] uppercase tracking-wider mb-1">
+                  Festival / Season Offer Coupon
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={couponCode}
+                    onChange={e => setCouponCode(e.target.value.toUpperCase())}
+                    placeholder="e.g. FESTIVE25, DASHAIN30, AUTUMN20"
+                    className="flex-1 px-3 py-1.5 text-xs bg-white border border-[#E8DDD8] rounded-lg text-[#2D1217] uppercase font-mono tracking-wider focus:outline-none focus:ring-1 focus:ring-[#7A1C30]"
+                  />
+                  {activeCampaigns.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setCouponCode(activeCampaigns[0].discountCode)}
+                      className="px-2.5 py-1.5 bg-[#FCECE9] text-[#5B1423] border border-[#F2CAC2] rounded-lg text-[10px] font-bold uppercase cursor-pointer hover:bg-[#F5DBD5]"
+                    >
+                      Use {activeCampaigns[0].discountCode}
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -122,76 +165,63 @@ export const CheckoutModal: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-[#2D1217] mb-1">Street Address</label>
+                  <label className="block text-[11px] text-[#7A5B61] mb-1">Street Address</label>
                   <input
                     type="text"
                     required
                     value={street}
                     onChange={e => setStreet(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-white border border-[#E8DDD8] rounded-lg text-[#2D1217] focus:outline-none focus:ring-1 focus:ring-[#7A1C30]"
+                    className="w-full px-3 py-1.5 text-xs bg-white border border-[#E8DDD8] rounded-lg text-[#2D1217] focus:outline-none focus:ring-1 focus:ring-[#7A1C30]"
                   />
                 </div>
 
                 <div className="grid grid-cols-3 gap-2">
                   <div>
-                    <label className="block text-[11px] font-medium text-[#2D1217] mb-1">City</label>
+                    <label className="block text-[11px] text-[#7A5B61] mb-1">City</label>
                     <input
                       type="text"
                       required
                       value={city}
                       onChange={e => setCity(e.target.value)}
-                      className="w-full px-3 py-2 text-xs bg-white border border-[#E8DDD8] rounded-lg text-[#2D1217] focus:outline-none focus:ring-1 focus:ring-[#7A1C30]"
+                      className="w-full px-3 py-1.5 text-xs bg-white border border-[#E8DDD8] rounded-lg text-[#2D1217] focus:outline-none focus:ring-1 focus:ring-[#7A1C30]"
                     />
                   </div>
+
                   <div>
-                    <label className="block text-[11px] font-medium text-[#2D1217] mb-1">Region/State</label>
+                    <label className="block text-[11px] text-[#7A5B61] mb-1">State / Province</label>
                     <input
                       type="text"
                       required
                       value={state}
                       onChange={e => setState(e.target.value)}
-                      className="w-full px-3 py-2 text-xs bg-white border border-[#E8DDD8] rounded-lg text-[#2D1217] focus:outline-none focus:ring-1 focus:ring-[#7A1C30]"
+                      className="w-full px-3 py-1.5 text-xs bg-white border border-[#E8DDD8] rounded-lg text-[#2D1217] focus:outline-none focus:ring-1 focus:ring-[#7A1C30]"
                     />
                   </div>
+
                   <div>
-                    <label className="block text-[11px] font-medium text-[#2D1217] mb-1">Postal Code</label>
+                    <label className="block text-[11px] text-[#7A5B61] mb-1">Postal Code</label>
                     <input
                       type="text"
                       required
                       value={zip}
                       onChange={e => setZip(e.target.value)}
-                      className="w-full px-3 py-2 text-xs bg-white border border-[#E8DDD8] rounded-lg text-[#2D1217] focus:outline-none focus:ring-1 focus:ring-[#7A1C30]"
+                      className="w-full px-3 py-1.5 text-xs bg-white border border-[#E8DDD8] rounded-lg text-[#2D1217] focus:outline-none focus:ring-1 focus:ring-[#7A1C30]"
                     />
                   </div>
                 </div>
               </div>
 
-              {/* Payment Method Simulator */}
-              <div className="p-3 bg-white rounded-xl border border-[#E8DDD8] text-xs space-y-1">
-                <div className="font-semibold text-[#2D1217] flex items-center justify-between">
-                  <span>Payment Method</span>
-                  <span className="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded font-medium">
-                    Verified Checkout
-                  </span>
-                </div>
-                <p className="text-[#5C4449] text-[11px]">
-                  Visa / Mastercard / Amex Boutique Express Card Ending in •••• 4242
-                </p>
-              </div>
-
               {/* Submit */}
-              <button
-                type="submit"
-                className="w-full py-3 px-4 bg-[#5B1423] hover:bg-[#7A1C30] text-white text-xs font-semibold uppercase tracking-wider rounded-lg shadow-md transition-colors flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <span>Authorize & Place Order (${cartSubtotal.toFixed(2)})</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
-
-              <div className="flex items-center justify-center gap-1.5 text-[10px] text-[#7A5B61]">
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-700" />
-                <span>Complimentary insured shipping & 30-day atelier return guarantee</span>
+              <div className="pt-3">
+                <button
+                  type="submit"
+                  className="w-full py-3 bg-[#5B1423] hover:bg-[#7A1C30] text-white font-semibold text-xs uppercase tracking-wider rounded-xl shadow-md transition-colors cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <span>Confirm Order ({formatPrice(cartSubtotal)})</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
               </div>
+
             </form>
           )}
         </div>

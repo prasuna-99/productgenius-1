@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Upload, Check, Image as ImageIcon, Link as LinkIcon, Sparkles, AlertCircle } from 'lucide-react';
+import { X, Upload, Check, Image as ImageIcon, Link as LinkIcon, Sparkles, Loader2 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { Product } from '../../types';
+import { Product, ProductCategory } from '../../types';
+import { compressImage } from '../../utils/imageCompressor';
+import { formatPrice } from '../../utils/format';
 
 interface ProductFormModalProps {
   isOpen: boolean;
@@ -18,25 +20,28 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [title, setTitle] = useState('');
-  const [category, setCategory] = useState<Product['category']>('Fragrance & Bath');
-  const [price, setPrice] = useState(120);
-  const [originalPrice, setOriginalPrice] = useState(140);
-  const [stockCount, setStockCount] = useState(15);
+  const [category, setCategory] = useState<ProductCategory>('Skincare');
+  const [price, setPrice] = useState(1450);
+  const [originalPrice, setOriginalPrice] = useState(1750);
+  const [stockCount, setStockCount] = useState(25);
   const [sku, setSku] = useState('');
   const [description, setDescription] = useState('');
-  const [imageUrl, setImageUrl] = useState('/src/assets/images/scented_candle_ivory_1790511939065.jpg');
-  const [features, setFeatures] = useState('Artisanal craft\nHypoallergenic\nMade in France');
+  const [imageUrl, setImageUrl] = useState('/src/assets/images/skincare_cleanser_moisturizer_1790516249925.jpg');
+  const [features, setFeatures] = useState('Artisanal botanical formulation\nDermatologist tested & hypoallergenic\nHand-crafted with clean ingredients');
   const [imageMethod, setImageMethod] = useState<'gallery' | 'presets' | 'url'>('gallery');
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
   const [urlInput, setUrlInput] = useState('');
   const [isDragging, setIsDragging] = useState(false);
+  const [isCompressing, setIsCompressing] = useState(false);
 
   const sampleImages = [
-    { label: 'Burgundy Silk', path: '/src/assets/images/burgundy_silk_robe_1790511897311.jpg' },
-    { label: 'Blush Perfume', path: '/src/assets/images/botanical_perfume_rose_1790511914245.jpg' },
-    { label: 'Oxblood Leather', path: '/src/assets/images/leather_tote_burgundy_1790511925707.jpg' },
-    { label: 'Ivory Candle', path: '/src/assets/images/scented_candle_ivory_1790511939065.jpg' },
+    { label: 'Skincare & Hydration', path: '/src/assets/images/skincare_cleanser_moisturizer_1790516249925.jpg' },
+    { label: 'Velvet Matte Makeup', path: '/src/assets/images/luxury_matte_foundation_lipstick_1790516270933.jpg' },
+    { label: 'Hair & Bodycare Elixir', path: '/src/assets/images/luxury_hair_repair_serum_1790516287700.jpg' },
+    { label: 'Artisanal Rose Perfume', path: '/src/assets/images/botanical_perfume_rose_1790511914245.jpg' },
   ];
+
+  const allowedCategories: ProductCategory[] = ['Skincare', 'Makeup', 'Bodycare', 'Fragrance'];
 
   useEffect(() => {
     if (productToEdit) {
@@ -50,40 +55,42 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
       setImageUrl(productToEdit.imageUrl);
       setUrlInput(productToEdit.imageUrl);
       setFeatures(productToEdit.features.join('\n'));
-      setUploadedFileName(productToEdit.imageUrl.startsWith('data:') ? 'Custom Gallery Upload' : null);
+      setUploadedFileName(productToEdit.imageUrl.startsWith('data:') ? 'Optimized Device Photo' : null);
     } else {
       setTitle('');
-      setCategory('Fragrance & Bath');
-      setPrice(120);
-      setOriginalPrice(140);
-      setStockCount(20);
+      setCategory('Skincare');
+      setPrice(1450);
+      setOriginalPrice(1750);
+      setStockCount(25);
       setSku(`PG-${Math.floor(100 + Math.random() * 900)}`);
       setDescription('');
-      setImageUrl('/src/assets/images/scented_candle_ivory_1790511939065.jpg');
+      setImageUrl('/src/assets/images/skincare_cleanser_moisturizer_1790516249925.jpg');
       setUrlInput('');
       setUploadedFileName(null);
-      setFeatures('Handcrafted finish\nSignature packaging\nSustainable ingredients');
+      setFeatures('Artisanal botanical formulation\nDermatologist tested & hypoallergenic\nHand-crafted with clean ingredients');
     }
   }, [productToEdit, isOpen]);
 
   if (!isOpen) return null;
 
-  // Process selected image file from device/gallery
-  const handleFileProcess = (file: File) => {
+  // Process and automatically compress image to prevent browser crashes / localStorage quota overflow
+  const handleFileProcess = async (file: File) => {
     if (!file.type.startsWith('image/')) {
       alert('Please select a valid image file (PNG, JPG, WebP, etc.).');
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        setImageUrl(reader.result);
-        setUploadedFileName(file.name);
-        setImageMethod('gallery');
-      }
-    };
-    reader.readAsDataURL(file);
+    setIsCompressing(true);
+    try {
+      const optimizedDataUrl = await compressImage(file, 800, 800, 0.82);
+      setImageUrl(optimizedDataUrl);
+      setUploadedFileName(file.name);
+      setImageMethod('gallery');
+    } catch (err) {
+      console.error('Failed to compress image:', err);
+    } finally {
+      setIsCompressing(false);
+    }
   };
 
   const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -142,329 +149,390 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
         reviewsCount: 1,
         inStock: Number(stockCount) > 0,
         stockCount: Number(stockCount),
-        sku,
+        sku: sku || `PG-${Math.floor(100 + Math.random() * 900)}`,
         sellerId: currentUser.id,
-        sellerName: currentUser.storeName || currentUser.name,
+        sellerName: currentUser.storeName || currentUser.name || 'Artisan Partner',
         description,
         features: featureList,
         imageUrl,
-        tags: ['New Arrival', category],
+        tags: [category, 'New Arrival', 'Artisan'],
         isFeatured: false,
       });
     }
+
     onClose();
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-[#FAF7F2] w-full max-w-2xl rounded-2xl shadow-2xl border border-[#E8DDD8] overflow-hidden max-h-[92vh] flex flex-col">
+      <div className="bg-[#FAF7F2] w-full max-w-2xl rounded-2xl shadow-2xl border border-[#E8DDD8] overflow-hidden max-h-[90vh] flex flex-col">
         {/* Header */}
-        <div className="bg-[#5B1423] text-white p-5 flex items-center justify-between">
-          <div>
-            <h2 className="font-display text-xl font-semibold">
-              {productToEdit ? 'Edit Atelier Product' : 'Add New Inventory Piece'}
-            </h2>
-            <p className="text-xs text-[#F2CAC2] mt-0.5">
-              Upload photos from your gallery, specify craftsmanship details, and configure stock.
-            </p>
-          </div>
-          <button onClick={onClose} className="text-[#FAF7F2]/80 hover:text-white cursor-pointer">
+        <div className="bg-[#5B1423] text-white p-6 relative shrink-0">
+          <button
+            onClick={onClose}
+            className="absolute top-5 right-5 text-[#FAF7F2]/80 hover:text-white transition-colors cursor-pointer"
+          >
             <X className="w-5 h-5" />
           </button>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-[10px] uppercase font-bold tracking-widest bg-white/10 px-2 py-0.5 rounded text-[#F2CAC2]">
+              Merchant Catalog Management
+            </span>
+          </div>
+          <span className="font-display text-2xl font-semibold tracking-tight block">
+            {productToEdit ? 'Edit Product Specification' : 'Add New Boutique Product'}
+          </span>
+          <p className="text-xs text-[#F2CAC2] mt-1">
+            Specify pricing in Rupees (Rs), assign one of the 4 core categories, and upload optimized product images.
+          </p>
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-5 text-xs">
+        <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-6 flex-1 text-xs">
           
-          {/* Product Picture Gallery & Upload Section */}
-          <div className="p-4 bg-white rounded-xl border border-[#E8DDD8] space-y-3 shadow-sm">
-            <div className="flex items-center justify-between">
-              <label className="font-semibold text-xs text-[#2D1217] uppercase tracking-wider flex items-center gap-1.5">
-                <ImageIcon className="w-4 h-4 text-[#5B1423]" />
-                Product Picture (Gallery & Media)
-              </label>
+          {/* Basic Info */}
+          <div className="space-y-4">
+            <h4 className="font-semibold text-sm text-[#2D1217] pb-2 border-b border-[#E8DDD8]">
+              Product Identification & Category
+            </h4>
 
-              {/* Source method pills */}
-              <div className="flex bg-[#FAF7F2] p-1 rounded-lg border border-[#E8DDD8] gap-1">
-                <button
-                  type="button"
-                  onClick={() => setImageMethod('gallery')}
-                  className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors cursor-pointer ${
-                    imageMethod === 'gallery'
-                      ? 'bg-[#5B1423] text-white shadow-xs'
-                      : 'text-[#5C4449] hover:text-[#5B1423]'
-                  }`}
-                >
-                  From Gallery
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setImageMethod('presets')}
-                  className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors cursor-pointer ${
-                    imageMethod === 'presets'
-                      ? 'bg-[#5B1423] text-white shadow-xs'
-                      : 'text-[#5C4449] hover:text-[#5B1423]'
-                  }`}
-                >
-                  Presets
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setImageMethod('url')}
-                  className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors cursor-pointer ${
-                    imageMethod === 'url'
-                      ? 'bg-[#5B1423] text-white shadow-xs'
-                      : 'text-[#5C4449] hover:text-[#5B1423]'
-                  }`}
-                >
-                  Web URL
-                </button>
-              </div>
+            <div>
+              <label className="block text-xs font-semibold text-[#7A5B61] uppercase tracking-wider mb-1">
+                Product Title *
+              </label>
+              <input
+                type="text"
+                required
+                value={title}
+                onChange={e => setTitle(e.target.value)}
+                placeholder="e.g. Squalane Peptide Restorative Face Cream"
+                className="w-full px-3 py-2 bg-white border border-[#E8DDD8] rounded-lg text-[#2D1217] focus:outline-none focus:ring-1 focus:ring-[#7A1C30]"
+              />
             </div>
 
-            {/* Hidden File Input for Device Gallery */}
-            <input
-              type="file"
-              ref={fileInputRef}
-              accept="image/*"
-              onChange={handleFileInputChange}
-              className="hidden"
-            />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-[#7A5B61] uppercase tracking-wider mb-1">
+                  Product Category *
+                </label>
+                <select
+                  value={category}
+                  onChange={e => setCategory(e.target.value as ProductCategory)}
+                  className="w-full px-3 py-2 bg-white border border-[#E8DDD8] rounded-lg text-[#2D1217] focus:outline-none focus:ring-1 focus:ring-[#7A1C30] cursor-pointer font-medium"
+                >
+                  {allowedCategories.map(cat => (
+                    <option key={cat} value={cat}>
+                      {cat}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-[#7A5B61] mt-1">
+                  Mapped to Apriori market basket association engine.
+                </p>
+              </div>
 
-            {/* 1. Gallery Upload View */}
+              <div>
+                <label className="block text-xs font-semibold text-[#7A5B61] uppercase tracking-wider mb-1">
+                  Catalog SKU
+                </label>
+                <input
+                  type="text"
+                  value={sku}
+                  onChange={e => setSku(e.target.value)}
+                  placeholder="e.g. PG-SKN-204"
+                  className="w-full px-3 py-2 bg-white border border-[#E8DDD8] rounded-lg text-[#2D1217] focus:outline-none focus:ring-1 focus:ring-[#7A1C30]"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Pricing & Inventory in Rs */}
+          <div className="space-y-4">
+            <h4 className="font-semibold text-sm text-[#2D1217] pb-2 border-b border-[#E8DDD8]">
+              Pricing (in Rupees Rs) & Stock
+            </h4>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-[#7A5B61] uppercase tracking-wider mb-1">
+                  Selling Price (Rs) *
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 font-mono text-[#7A5B61] text-xs font-bold">
+                    Rs
+                  </span>
+                  <input
+                    type="number"
+                    required
+                    min="1"
+                    value={price}
+                    onChange={e => setPrice(Number(e.target.value))}
+                    className="w-full pl-10 pr-3 py-2 bg-white border border-[#E8DDD8] rounded-lg text-[#2D1217] font-mono focus:outline-none focus:ring-1 focus:ring-[#7A1C30]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#7A5B61] uppercase tracking-wider mb-1">
+                  MSRP / Original Price (Rs)
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 font-mono text-[#7A5B61] text-xs font-bold">
+                    Rs
+                  </span>
+                  <input
+                    type="number"
+                    min="1"
+                    value={originalPrice}
+                    onChange={e => setOriginalPrice(Number(e.target.value))}
+                    className="w-full pl-10 pr-3 py-2 bg-white border border-[#E8DDD8] rounded-lg text-[#2D1217] font-mono focus:outline-none focus:ring-1 focus:ring-[#7A1C30]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#7A5B61] uppercase tracking-wider mb-1">
+                  Stock Units Available
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={stockCount}
+                  onChange={e => setStockCount(Number(e.target.value))}
+                  className="w-full px-3 py-2 bg-white border border-[#E8DDD8] rounded-lg text-[#2D1217] font-mono focus:outline-none focus:ring-1 focus:ring-[#7A1C30]"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Image Selection with Crash-Proof Compression */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-[#E8DDD8]">
+              <h4 className="font-semibold text-sm text-[#2D1217]">
+                Product Visual Asset
+              </h4>
+              <span className="text-[10px] bg-emerald-100 text-emerald-800 font-semibold px-2 py-0.5 rounded">
+                ✓ Auto-Compressed & Safe
+              </span>
+            </div>
+
+            {/* Method Tabs */}
+            <div className="flex items-center gap-2 border-b border-[#E8DDD8] pb-2">
+              <button
+                type="button"
+                onClick={() => setImageMethod('gallery')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium cursor-pointer transition-colors ${
+                  imageMethod === 'gallery'
+                    ? 'bg-[#5B1423] text-white shadow-xs'
+                    : 'bg-white text-[#5C4449] hover:bg-[#FCECE9]'
+                }`}
+              >
+                <Upload className="w-3.5 h-3.5" />
+                <span>Upload From Device</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setImageMethod('presets')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium cursor-pointer transition-colors ${
+                  imageMethod === 'presets'
+                    ? 'bg-[#5B1423] text-white shadow-xs'
+                    : 'bg-white text-[#5C4449] hover:bg-[#FCECE9]'
+                }`}
+              >
+                <ImageIcon className="w-3.5 h-3.5" />
+                <span>Boutique Presets</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setImageMethod('url')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium cursor-pointer transition-colors ${
+                  imageMethod === 'url'
+                    ? 'bg-[#5B1423] text-white shadow-xs'
+                    : 'bg-white text-[#5C4449] hover:bg-[#FCECE9]'
+                }`}
+              >
+                <LinkIcon className="w-3.5 h-3.5" />
+                <span>Image Web URL</span>
+              </button>
+            </div>
+
+            {/* Gallery Upload Box */}
             {imageMethod === 'gallery' && (
               <div
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
                 onClick={() => fileInputRef.current?.click()}
-                className={`border-2 border-dashed rounded-xl p-5 text-center cursor-pointer transition-all flex flex-col items-center justify-center gap-2 ${
+                className={`p-6 border-2 border-dashed rounded-xl text-center cursor-pointer transition-all ${
                   isDragging
                     ? 'border-[#5B1423] bg-[#FCECE9]'
-                    : 'border-[#D8B7BE] bg-[#FAF7F2] hover:bg-[#FCECE9]/50 hover:border-[#7A1C30]'
+                    : 'border-[#E8DDD8] bg-white hover:border-[#7A1C30]'
                 }`}
               >
-                <div className="w-12 h-12 rounded-full bg-[#FCECE9] text-[#5B1423] flex items-center justify-center">
-                  <Upload className="w-6 h-6" />
-                </div>
-                <div>
-                  <span className="font-semibold text-xs text-[#5B1423]">
-                    Click to choose photo from your gallery / device
-                  </span>
-                  <p className="text-[11px] text-[#7A5B61] mt-0.5">
-                    Supports JPG, PNG, WebP, GIF photos from camera roll or storage
-                  </p>
-                </div>
-                {uploadedFileName && (
-                  <div className="mt-1 px-3 py-1 bg-emerald-100 text-emerald-800 rounded-full text-[11px] font-semibold flex items-center gap-1.5">
-                    <Check className="w-3.5 h-3.5" /> Photo loaded: {uploadedFileName}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileInputChange}
+                  className="hidden"
+                />
+                {isCompressing ? (
+                  <div className="flex flex-col items-center justify-center space-y-2 py-4">
+                    <Loader2 className="w-8 h-8 text-[#5B1423] animate-spin" />
+                    <p className="font-semibold text-[#5B1423]">
+                      Optimizing image resolution & compressing...
+                    </p>
+                    <p className="text-[11px] text-[#7A5B61]">
+                      Downscaling to safe dimensions to prevent system crashes.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <Upload className="w-8 h-8 text-[#7A5B61] mx-auto opacity-70" />
+                    <div className="font-semibold text-[#2D1217]">
+                      {uploadedFileName ? (
+                        <span className="text-emerald-700 flex items-center justify-center gap-1">
+                          <Check className="w-4 h-4" /> Ready: {uploadedFileName}
+                        </span>
+                      ) : (
+                        <span>Click to browse device or drag and drop photo</span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-[#7A5B61]">
+                      Supports PNG, JPG, WebP. High-res camera photos are automatically compressed safely without quality loss.
+                    </p>
                   </div>
                 )}
               </div>
             )}
 
-            {/* 2. Preset Selection View */}
+            {/* Presets */}
             {imageMethod === 'presets' && (
-              <div>
-                <div className="text-[11px] text-[#7A5B61] mb-2">
-                  Select one of our studio-photographed atelier assets:
-                </div>
-                <div className="grid grid-cols-4 gap-2">
-                  {sampleImages.map(img => (
-                    <div
-                      key={img.path}
-                      onClick={() => {
-                        setImageUrl(img.path);
-                        setUploadedFileName(null);
-                      }}
-                      className={`p-1.5 rounded-lg border cursor-pointer transition-all ${
-                        imageUrl === img.path
-                          ? 'border-[#5B1423] bg-[#FCECE9] ring-2 ring-[#5B1423]'
-                          : 'border-[#E8DDD8] bg-white hover:border-[#7A1C30]'
-                      }`}
-                    >
-                      <img src={img.path} alt={img.label} className="w-full h-14 object-cover rounded" />
-                      <div className="text-[10px] text-center mt-1 truncate font-medium text-[#2D1217]">
-                        {img.label}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* 3. Direct URL View */}
-            {imageMethod === 'url' && (
-              <div className="space-y-2">
-                <div className="flex gap-2">
-                  <input
-                    type="url"
-                    placeholder="https://images.unsplash.com/photo-..."
-                    value={urlInput}
-                    onChange={e => {
-                      setUrlInput(e.target.value);
-                      setImageUrl(e.target.value);
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {sampleImages.map(sample => (
+                  <div
+                    key={sample.path}
+                    onClick={() => {
+                      setImageUrl(sample.path);
                       setUploadedFileName(null);
                     }}
-                    className="flex-1 px-3 py-2 bg-[#FAF7F2] border border-[#E8DDD8] rounded-lg text-[#2D1217] focus:outline-none focus:ring-1 focus:ring-[#7A1C30]"
-                  />
-                </div>
-                <div className="text-[10px] text-[#7A5B61]">
-                  Paste any publicly accessible direct image link.
-                </div>
+                    className={`p-2 bg-white rounded-xl border cursor-pointer transition-all ${
+                      imageUrl === sample.path
+                        ? 'border-[#5B1423] ring-1 ring-[#5B1423]'
+                        : 'border-[#E8DDD8] hover:border-[#7A1C30]'
+                    }`}
+                  >
+                    <img
+                      src={sample.path}
+                      alt={sample.label}
+                      className="w-full h-20 object-cover rounded-lg mb-1"
+                    />
+                    <div className="text-[10px] font-semibold text-[#2D1217] truncate">
+                      {sample.label}
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
 
-            {/* Live Preview Box */}
-            <div className="flex items-center gap-4 p-3 bg-[#FAF7F2] rounded-lg border border-[#E8DDD8]">
+            {/* URL Input */}
+            {imageMethod === 'url' && (
+              <div className="space-y-2">
+                <input
+                  type="url"
+                  value={urlInput}
+                  onChange={e => {
+                    setUrlInput(e.target.value);
+                    setImageUrl(e.target.value);
+                  }}
+                  placeholder="https://images.unsplash.com/..."
+                  className="w-full px-3 py-2 bg-white border border-[#E8DDD8] rounded-lg text-[#2D1217] focus:outline-none focus:ring-1 focus:ring-[#7A1C30]"
+                />
+                <p className="text-[10px] text-[#7A5B61]">
+                  Paste an image link from Unsplash, Shopify CDN, or secure cloud storage.
+                </p>
+              </div>
+            )}
+
+            {/* Live Preview */}
+            <div className="p-3 bg-white rounded-xl border border-[#E8DDD8] flex items-center gap-4">
               <img
                 src={imageUrl}
-                alt="Selected Preview"
-                className="w-16 h-16 rounded-lg object-cover border border-[#E8DDD8] bg-white shadow-xs"
+                alt="Preview"
+                className="w-16 h-16 rounded-lg object-cover border border-[#E8DDD8] bg-[#FAF7F2]"
                 onError={(e) => {
-                  (e.target as HTMLElement).style.opacity = '0.5';
+                  (e.target as HTMLImageElement).src = '/src/assets/images/skincare_cleanser_moisturizer_1790516249925.jpg';
                 }}
               />
-              <div className="flex-1 min-w-0">
-                <div className="text-[11px] font-semibold text-[#2D1217] flex items-center gap-1.5">
-                  <Check className="w-3.5 h-3.5 text-emerald-700" />
-                  Active Picture Preview
-                </div>
-                <div className="text-[10px] text-[#7A5B61] truncate mt-0.5">
-                  {uploadedFileName ? `Gallery File: ${uploadedFileName}` : imageUrl}
-                </div>
+              <div className="min-w-0">
+                <span className="text-[10px] uppercase font-bold text-[#7A5B61] tracking-wider block">
+                  Active Asset Preview
+                </span>
+                <p className="text-xs text-[#2D1217] font-semibold truncate">
+                  {title || 'Untitled Product'}
+                </p>
+                <p className="text-xs font-mono font-bold text-[#5B1423]">
+                  {formatPrice(price)}
+                </p>
               </div>
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="px-2.5 py-1 text-[11px] bg-white border border-[#E8DDD8] hover:bg-[#FCECE9] text-[#5B1423] rounded font-medium transition-colors cursor-pointer shrink-0"
-              >
-                Change Photo
-              </button>
             </div>
           </div>
 
-          {/* Title */}
-          <div>
-            <label className="block font-medium text-[#2D1217] mb-1">Product Title</label>
-            <input
-              type="text"
-              required
-              value={title}
-              onChange={e => setTitle(e.target.value)}
-              placeholder="e.g. Mulberry Silk Peignoir in Deep Crimson"
-              className="w-full px-3 py-2 bg-white border border-[#E8DDD8] rounded-lg text-[#2D1217] focus:outline-none focus:ring-1 focus:ring-[#7A1C30]"
-            />
-          </div>
-
-          {/* Category & SKU */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block font-medium text-[#2D1217] mb-1">Category</label>
-              <select
-                value={category}
-                onChange={e => setCategory(e.target.value as any)}
-                className="w-full px-3 py-2 bg-white border border-[#E8DDD8] rounded-lg text-[#2D1217] focus:outline-none focus:ring-1 focus:ring-[#7A1C30]"
-              >
-                <option value="Fragrance & Bath">Fragrance & Bath</option>
-                <option value="Apparel & Silk">Apparel & Silk</option>
-                <option value="Leather Goods">Leather Goods</option>
-                <option value="Home & Ambiance">Home & Ambiance</option>
-                <option value="Gourmet & Cellar">Gourmet & Cellar</option>
-              </select>
-            </div>
+          {/* Description & Features */}
+          <div className="space-y-4">
+            <h4 className="font-semibold text-sm text-[#2D1217] pb-2 border-b border-[#E8DDD8]">
+              Product Story & Highlights
+            </h4>
 
             <div>
-              <label className="block font-medium text-[#2D1217] mb-1">SKU Code</label>
-              <input
-                type="text"
+              <label className="block text-xs font-semibold text-[#7A5B61] uppercase tracking-wider mb-1">
+                Description *
+              </label>
+              <textarea
                 required
-                value={sku}
-                onChange={e => setSku(e.target.value)}
-                placeholder="PG-SLK-09"
-                className="w-full px-3 py-2 bg-white border border-[#E8DDD8] rounded-lg text-[#2D1217] focus:outline-none focus:ring-1 focus:ring-[#7A1C30]"
-              />
-            </div>
-          </div>
-
-          {/* Pricing & Stock */}
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label className="block font-medium text-[#2D1217] mb-1">Retail Price ($)</label>
-              <input
-                type="number"
-                step="0.01"
-                required
-                value={price}
-                onChange={e => setPrice(Number(e.target.value))}
+                rows={3}
+                value={description}
+                onChange={e => setDescription(e.target.value)}
+                placeholder="Describe active ingredients, texture, sensory notes, and benefits..."
                 className="w-full px-3 py-2 bg-white border border-[#E8DDD8] rounded-lg text-[#2D1217] focus:outline-none focus:ring-1 focus:ring-[#7A1C30]"
               />
             </div>
 
             <div>
-              <label className="block font-medium text-[#2D1217] mb-1">Original Price ($)</label>
-              <input
-                type="number"
-                step="0.01"
-                value={originalPrice}
-                onChange={e => setOriginalPrice(Number(e.target.value))}
-                className="w-full px-3 py-2 bg-white border border-[#E8DDD8] rounded-lg text-[#2D1217] focus:outline-none focus:ring-1 focus:ring-[#7A1C30]"
+              <label className="block text-xs font-semibold text-[#7A5B61] uppercase tracking-wider mb-1">
+                Features & Bullet Points (One per line)
+              </label>
+              <textarea
+                rows={3}
+                value={features}
+                onChange={e => setFeatures(e.target.value)}
+                placeholder="Triple Hyaluronic Acid&#10;100% Vegan & Cruelty Free&#10;pH 5.5 Barrier Balancing"
+                className="w-full px-3 py-2 bg-white border border-[#E8DDD8] rounded-lg text-[#2D1217] focus:outline-none focus:ring-1 focus:ring-[#7A1C30] font-mono text-xs"
               />
             </div>
-
-            <div>
-              <label className="block font-medium text-[#2D1217] mb-1">Stock Quantity</label>
-              <input
-                type="number"
-                required
-                value={stockCount}
-                onChange={e => setStockCount(Number(e.target.value))}
-                className="w-full px-3 py-2 bg-white border border-[#E8DDD8] rounded-lg text-[#2D1217] focus:outline-none focus:ring-1 focus:ring-[#7A1C30]"
-              />
-            </div>
-          </div>
-
-          {/* Description */}
-          <div>
-            <label className="block font-medium text-[#2D1217] mb-1">Product Description</label>
-            <textarea
-              rows={3}
-              required
-              value={description}
-              onChange={e => setDescription(e.target.value)}
-              placeholder="Detailed description of craftsmanship, materials, and provenance..."
-              className="w-full px-3 py-2 bg-white border border-[#E8DDD8] rounded-lg text-[#2D1217] focus:outline-none focus:ring-1 focus:ring-[#7A1C30]"
-            />
-          </div>
-
-          {/* Artisanal Features */}
-          <div>
-            <label className="block font-medium text-[#2D1217] mb-1">Artisanal Features (One per line)</label>
-            <textarea
-              rows={3}
-              value={features}
-              onChange={e => setFeatures(e.target.value)}
-              placeholder="Feature 1&#10;Feature 2&#10;Feature 3"
-              className="w-full px-3 py-2 bg-white border border-[#E8DDD8] rounded-lg text-[#2D1217] focus:outline-none focus:ring-1 focus:ring-[#7A1C30]"
-            />
           </div>
 
           {/* Form Actions */}
-          <div className="pt-4 border-t border-[#E8DDD8] flex justify-end gap-3">
+          <div className="pt-4 border-t border-[#E8DDD8] flex items-center justify-end gap-3 shrink-0">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 bg-white hover:bg-[#FAF7F2] text-[#5C4449] border border-[#E8DDD8] rounded-lg font-medium cursor-pointer"
+              className="px-4 py-2 bg-white border border-[#E8DDD8] text-[#5C4449] rounded-lg font-semibold hover:bg-[#FCECE9] transition-colors cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-5 py-2 bg-[#5B1423] hover:bg-[#7A1C30] text-white font-semibold uppercase tracking-wider rounded-lg shadow-sm cursor-pointer"
+              disabled={isCompressing}
+              className="px-6 py-2 bg-[#5B1423] hover:bg-[#7A1C30] text-white font-semibold rounded-lg shadow-sm transition-colors cursor-pointer flex items-center gap-1.5"
             >
-              {productToEdit ? 'Save Changes' : 'Publish Product'}
+              <Sparkles className="w-3.5 h-3.5 text-[#F2CAC2]" />
+              <span>{productToEdit ? 'Save Changes' : 'Publish Product to Catalog'}</span>
             </button>
           </div>
+
         </form>
       </div>
     </div>

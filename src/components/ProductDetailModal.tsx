@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { X, Star, ShoppingBag, Heart, Sparkles, ArrowRight, Check, ShieldCheck } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { Product } from '../types';
+import { formatPrice } from '../utils/format';
+import { ImageWithFallback } from './common/ImageWithFallback';
 
 export const ProductDetailModal: React.FC = () => {
   const {
@@ -13,6 +15,7 @@ export const ProductDetailModal: React.FC = () => {
     associationRules,
     products,
     setActiveMathModalRule,
+    instantOrder,
   } = useApp();
 
   const [quantity, setQuantity] = useState(1);
@@ -63,14 +66,10 @@ export const ProductDetailModal: React.FC = () => {
             
             {/* Product Image & Badges */}
             <div className="relative rounded-xl overflow-hidden bg-white border border-[#E8DDD8] shadow-sm">
-              <img
+              <ImageWithFallback
                 src={product.imageUrl}
                 alt={product.title}
-                className="w-full h-80 sm:h-96 object-cover"
-                referrerPolicy="no-referrer"
-                onError={(e) => {
-                  (e.target as HTMLElement).style.display = 'none';
-                }}
+                className="w-full h-80 sm:h-96"
               />
               <button
                 onClick={() => toggleWishlist(product.id)}
@@ -111,14 +110,14 @@ export const ProductDetailModal: React.FC = () => {
                 </div>
               </div>
 
-              {/* Pricing */}
+              {/* Pricing in Rs */}
               <div className="flex items-baseline gap-3">
                 <span className="text-3xl font-bold text-[#5B1423] font-mono tabular-nums">
-                  ${product.price.toFixed(2)}
+                  {formatPrice(product.price)}
                 </span>
                 {product.originalPrice && (
                   <span className="text-base text-[#7A5B61] line-through font-mono tabular-nums">
-                    ${product.originalPrice.toFixed(2)}
+                    {formatPrice(product.originalPrice)}
                   </span>
                 )}
               </div>
@@ -129,7 +128,7 @@ export const ProductDetailModal: React.FC = () => {
                   <div className="flex items-center justify-between">
                     <span className="font-semibold text-[#5B1423] flex items-center gap-1.5 uppercase tracking-wider text-[11px]">
                       <Sparkles className="w-3.5 h-3.5 text-[#7A1C30]" />
-                      Google Search Product Adjustment
+                      Dataset Matched Association Term
                     </span>
                     <span className="bg-[#5B1423] text-white px-2 py-0.5 rounded text-[10px] font-mono">
                       Dataset Token: {product.googleSearchMatchedTerm}
@@ -139,13 +138,13 @@ export const ProductDetailModal: React.FC = () => {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-[#5C4449]">
                     <div>
                       <span className="text-[#7A5B61] block text-[10px] uppercase font-semibold">Google Query Benchmark</span>
-                      <span className="font-mono text-[#2D1217] italic">"{product.googleSearchQuery}"</span>
+                      <span className="font-mono text-[#2D1217] italic">"{product.googleSearchQuery || product.title}"</span>
                     </div>
                     {product.googleBenchmarkPrice && (
                       <div>
                         <span className="text-[#7A5B61] block text-[10px] uppercase font-semibold">Market Benchmark Price</span>
                         <span className="font-mono font-bold text-[#5B1423]">
-                          ${product.googleBenchmarkPrice.toFixed(2)} (Shop saves ${Math.max(0, product.googleBenchmarkPrice - product.price).toFixed(2)})
+                          {formatPrice(product.googleBenchmarkPrice)} (Saves {formatPrice(Math.max(0, product.googleBenchmarkPrice - product.price))})
                         </span>
                       </div>
                     )}
@@ -216,27 +215,42 @@ export const ProductDetailModal: React.FC = () => {
                     </button>
                   </div>
 
-                  <button
-                    onClick={handleAddToCart}
-                    disabled={!product.inStock}
-                    className={`flex-1 py-3 px-6 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-md cursor-pointer ${
-                      product.inStock
-                        ? addedNotice
-                          ? 'bg-emerald-700 text-white'
-                          : 'bg-[#5B1423] hover:bg-[#7A1C30] text-white'
-                        : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                    }`}
-                  >
-                    {addedNotice ? (
-                      <>
-                        <Check className="w-4 h-4" /> Added to Shopping Bag
-                      </>
-                    ) : (
-                      <>
-                        <ShoppingBag className="w-4 h-4" /> Add to Shopping Bag (${(product.price * quantity).toFixed(2)})
-                      </>
-                    )}
-                  </button>
+                  <div className="flex-1 flex flex-col sm:flex-row gap-2">
+                    <button
+                      onClick={handleAddToCart}
+                      disabled={!product.inStock}
+                      className={`flex-1 py-3 px-4 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 border border-[#E8DDD8] shadow-xs cursor-pointer ${
+                        product.inStock
+                          ? addedNotice
+                            ? 'bg-emerald-700 text-white'
+                            : 'bg-white hover:bg-[#FAF7F2] text-[#5B1423]'
+                          : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                      }`}
+                    >
+                      {addedNotice ? (
+                        <>
+                          <Check className="w-4 h-4" /> Added!
+                        </>
+                      ) : (
+                        <>
+                          <ShoppingBag className="w-4 h-4" /> Add to Bag
+                        </>
+                      )}
+                    </button>
+
+                    <button
+                      onClick={() => instantOrder(product, quantity)}
+                      disabled={!product.inStock}
+                      className={`flex-1 py-3 px-4 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 shadow-md cursor-pointer ${
+                        product.inStock
+                          ? 'bg-[#5B1423] hover:bg-[#7A1C30] text-white'
+                          : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                      }`}
+                    >
+                      <Sparkles className="w-4 h-4 text-[#F2CAC2]" />
+                      <span>Order Now ({formatPrice(product.price * quantity)})</span>
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -255,7 +269,7 @@ export const ProductDetailModal: React.FC = () => {
                   </h3>
                 </div>
                 <div className="text-xs text-[#7A5B61]">
-                  Mined with Apriori algorithm from checkout baskets
+                  Mined with Apriori algorithm from 200 checkout baskets
                 </div>
               </div>
 
@@ -266,11 +280,10 @@ export const ProductDetailModal: React.FC = () => {
                     className="p-4 bg-white rounded-xl border border-[#E8DDD8] shadow-sm flex flex-col justify-between"
                   >
                     <div className="flex gap-3">
-                      <img
+                      <ImageWithFallback
                         src={pairedProd.imageUrl}
                         alt={pairedProd.title}
-                        className="w-16 h-16 rounded-lg object-cover border border-[#E8DDD8]"
-                        referrerPolicy="no-referrer"
+                        className="w-16 h-16 rounded-lg border border-[#E8DDD8]"
                       />
                       <div className="flex-1 min-w-0">
                         <div className="text-[10px] text-[#7A5B61] uppercase tracking-wider">
@@ -280,7 +293,7 @@ export const ProductDetailModal: React.FC = () => {
                           {pairedProd.title}
                         </h4>
                         <div className="text-xs font-mono font-bold text-[#5B1423] mt-0.5">
-                          ${pairedProd.price.toFixed(2)}
+                          {formatPrice(pairedProd.price)}
                         </div>
                         
                         {/* Association Stats */}
@@ -296,20 +309,29 @@ export const ProductDetailModal: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="mt-3 pt-3 border-t border-[#F5EBE6] flex items-center justify-between">
+                    <div className="mt-3 pt-3 border-t border-[#F5EBE6] flex items-center justify-between gap-2">
                       <button
                         onClick={() => setActiveMathModalRule(rule)}
                         className="text-[11px] text-[#7A1C30] hover:underline cursor-pointer flex items-center gap-1"
                       >
-                        Inspect Math Proof <ArrowRight className="w-3 h-3" />
+                        Inspect Proof <ArrowRight className="w-3 h-3" />
                       </button>
 
-                      <button
-                        onClick={() => addToCart(pairedProd, 1)}
-                        className="px-3 py-1 bg-[#FCECE9] hover:bg-[#F8DDD7] text-[#5B1423] text-xs font-semibold rounded-md border border-[#E8B4B8] transition-colors cursor-pointer"
-                      >
-                        + Add Pairing
-                      </button>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => addToCart(pairedProd, 1)}
+                          className="px-2.5 py-1 bg-white hover:bg-[#FAF7F2] text-[#5B1423] text-xs font-semibold rounded-md border border-[#E8DDD8] transition-colors cursor-pointer"
+                        >
+                          + Add
+                        </button>
+                        <button
+                          onClick={() => instantOrder(pairedProd, 1)}
+                          className="px-2.5 py-1 bg-[#5B1423] hover:bg-[#7A1C30] text-white text-xs font-semibold uppercase tracking-wider rounded-md transition-colors cursor-pointer flex items-center gap-1"
+                        >
+                          <Sparkles className="w-3 h-3 text-[#F2CAC2]" />
+                          <span>Order</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))}

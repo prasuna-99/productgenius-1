@@ -1,7 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import {
   ShieldCheck,
-  DollarSign,
   Users,
   Store,
   Layers,
@@ -26,11 +25,21 @@ import {
   RotateCcw,
   ExternalLink,
   Code,
+  Gift,
+  Tag,
+  Copy,
+  Calendar,
+  Check,
+  ToggleLeft,
+  ToggleRight,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { Role, Product, User } from '../../types';
+import { Role, Product, User, Campaign } from '../../types';
 import { ProductFormModal } from '../seller/ProductFormModal';
-import { RAW_DATASET_TEXT } from '../../data/userDataset';
+import { CampaignManagerModal } from './CampaignManagerModal';
+import { RAW_DATASET_TEXT, GOOGLE_ADJUSTED_PRODUCTS } from '../../data/userDataset';
+import { formatPrice } from '../../utils/format';
+import { ImageWithFallback } from '../common/ImageWithFallback';
 
 export const AdminDashboard: React.FC = () => {
   const {
@@ -41,6 +50,9 @@ export const AdminDashboard: React.FC = () => {
     deleteUser,
     deleteSeller,
     switchRole,
+    updateOrderStatus,
+    deliveryNotification,
+    setDeliveryNotification,
     transactions,
     rawDatasetRows,
     importDatasetText,
@@ -55,16 +67,25 @@ export const AdminDashboard: React.FC = () => {
     seedSyntheticTransactions,
     setActiveMathModalRule,
     currentUser,
+    campaigns,
+    addCampaign,
+    updateCampaign,
+    deleteCampaign,
+    toggleCampaignActive,
   } = useApp();
 
-  const [activeAdminTab, setActiveAdminTab] = useState<'apriori' | 'products' | 'sellers' | 'transactions'>('transactions');
+  const [activeAdminTab, setActiveAdminTab] = useState<
+    'products' | 'campaigns' | 'sellers' | 'apriori' | 'transactions'
+  >('products');
   const [isMining, setIsMining] = useState(false);
   const [searchProduct, setSearchProduct] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('All');
+  const [sellerFilter, setSellerFilter] = useState('All');
+  const [productSourceFilter, setProductSourceFilter] = useState<'all' | 'seller' | 'catalog'>('all');
   const [searchUser, setSearchUser] = useState('');
   const [roleFilter, setRoleFilter] = useState<'all' | 'seller' | 'customer' | 'admin'>('all');
 
-  // Dataset & Google Search Adjustments State
+  // Dataset State
   const [searchTx, setSearchTx] = useState('');
   const [txTypeFilter, setTxTypeFilter] = useState<string>('all');
   const [datasetSubTab, setDatasetSubTab] = useState<'transactions' | 'mappings'>('transactions');
@@ -77,11 +98,14 @@ export const AdminDashboard: React.FC = () => {
   const [removeSellerProducts, setRemoveSellerProducts] = useState<boolean>(true);
   const [productToEdit, setProductToEdit] = useState<Product | null>(null);
   const [isProductFormOpen, setIsProductFormOpen] = useState<boolean>(false);
+  const [isCampaignModalOpen, setIsCampaignModalOpen] = useState<boolean>(false);
+  const [campaignToEdit, setCampaignToEdit] = useState<Campaign | null>(null);
+  const [campaignToDelete, setCampaignToDelete] = useState<Campaign | null>(null);
   const [notification, setNotification] = useState<string | null>(null);
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
-  // Platform calculations
+  // Platform calculations in Rs
   const totalGMV = orders.reduce((sum, o) => sum + o.total, 0);
-  const platformCommission = totalGMV * 0.05; // 5% marketplace fee
   const productMap = new Map(products.map(p => [p.id, p]));
 
   const showToast = (msg: string) => {
@@ -89,12 +113,18 @@ export const AdminDashboard: React.FC = () => {
     setTimeout(() => setNotification(null), 4000);
   };
 
+  const handleCopyCode = (code: string) => {
+    navigator.clipboard?.writeText(code);
+    setCopiedCode(code);
+    setTimeout(() => setCopiedCode(null), 2500);
+  };
+
   const handleRunMining = () => {
     setIsMining(true);
     setTimeout(() => {
       recomputeApriori();
       setIsMining(false);
-      showToast('Apriori association rules successfully re-mined.');
+      showToast('Apriori association rules successfully re-mined from 200 transaction records.');
     }, 300);
   };
 
@@ -114,55 +144,91 @@ export const AdminDashboard: React.FC = () => {
     showToast(`Seller "${name}" and permissions have been removed.`);
   };
 
+  const handleSaveCampaign = (campaignData: Omit<Campaign, 'id'>) => {
+    if (campaignToEdit) {
+      updateCampaign(campaignToEdit.id, campaignData);
+      showToast(`Campaign "${campaignData.title}" updated.`);
+    } else {
+      addCampaign(campaignData);
+      showToast(`New campaign "${campaignData.title}" launched live!`);
+    }
+    setCampaignToEdit(null);
+  };
+
+  // Unique Categories from active products
+  const uniqueCategories = useMemo(() => {
+    const set = new Set<string>();
+    products.forEach(p => {
+      if (p.category) set.add(p.category);
+    });
+    return Array.from(set);
+  }, [products]);
+
+  // Unique Sellers for filtering
+  const uniqueSellers = useMemo(() => {
+    const set = new Set<string>();
+    products.forEach(p => {
+      if (p.sellerName) set.add(p.sellerName);
+    });
+    return Array.from(set);
+  }, [products]);
+
+  // Count of seller-added products
+  const sellerAddedCount = useMemo(() => {
+    return products.filter(p => !GOOGLE_ADJUSTED_PRODUCTS.some(gp => gp.id === p.id)).length;
+  }, [products]);
+
   // Filtered Products
   const filteredProducts = useMemo(() => {
     return products.filter(p => {
-      const matchCat = categoryFilter === 'All' || p.category === categoryFilter;
-      const matchSearch =
-        p.title.toLowerCase().includes(searchProduct.toLowerCase()) ||
-        p.sku.toLowerCase().includes(searchProduct.toLowerCase()) ||
-        p.sellerName.toLowerCase().includes(searchProduct.toLowerCase());
-      return matchCat && matchSearch;
-    });
-  }, [products, categoryFilter, searchProduct]);
+      const matchCat =
+        categoryFilter === 'All' || p.category.toLowerCase() === categoryFilter.toLowerCase();
+      const matchSeller = sellerFilter === 'All' || (p.sellerName && p.sellerName === sellerFilter);
+      const isSellerAdded = !GOOGLE_ADJUSTED_PRODUCTS.some(gp => gp.id === p.id);
+      const matchSource =
+        productSourceFilter === 'all' ||
+        (productSourceFilter === 'seller' && isSellerAdded) ||
+        (productSourceFilter === 'catalog' && !isSellerAdded);
 
-  // Filtered Users / Sellers
+      const q = searchProduct.toLowerCase().trim();
+      const matchSearch =
+        !q ||
+        (p.title && p.title.toLowerCase().includes(q)) ||
+        (p.sku && p.sku.toLowerCase().includes(q)) ||
+        (p.sellerName && p.sellerName.toLowerCase().includes(q)) ||
+        (p.description && p.description.toLowerCase().includes(q));
+
+      return matchCat && matchSeller && matchSource && matchSearch;
+    });
+  }, [products, categoryFilter, sellerFilter, productSourceFilter, searchProduct]);
+
+  // Filtered Users
   const filteredUsers = useMemo(() => {
     return allUsers.filter(u => {
       const matchRole = roleFilter === 'all' || u.role === roleFilter;
+      const q = searchUser.toLowerCase().trim();
       const matchSearch =
-        u.name.toLowerCase().includes(searchUser.toLowerCase()) ||
-        u.email.toLowerCase().includes(searchUser.toLowerCase()) ||
-        (u.storeName && u.storeName.toLowerCase().includes(searchUser.toLowerCase()));
+        !q ||
+        u.name.toLowerCase().includes(q) ||
+        u.email.toLowerCase().includes(q) ||
+        (u.storeName && u.storeName.toLowerCase().includes(q));
       return matchRole && matchSearch;
     });
   }, [allUsers, roleFilter, searchUser]);
 
-  // Filtered Raw Dataset Transactions
-  const filteredRawRows = useMemo(() => {
+  // Filtered Transactions
+  const filteredTransactions = useMemo(() => {
     return rawDatasetRows.filter(row => {
-      const matchType = txTypeFilter === 'all' || row.type.toLowerCase().trim() === txTypeFilter.toLowerCase().trim();
-      const query = searchTx.toLowerCase().trim();
-      if (!query) return matchType;
+      const matchType = txTypeFilter === 'all' || row.type.toLowerCase().includes(txTypeFilter.toLowerCase());
+      const q = searchTx.toLowerCase().trim();
       const matchSearch =
-        row.transaction_id.toLowerCase().includes(query) ||
-        row.customer_id.toLowerCase().includes(query) ||
-        row.products_purchased.toLowerCase().includes(query) ||
-        row.matchedProductIds.some(id => productMap.get(id)?.title.toLowerCase().includes(query));
+        !q ||
+        row.transaction_id.toLowerCase().includes(q) ||
+        row.customer_id.toLowerCase().includes(q) ||
+        row.products_purchased.toLowerCase().includes(q);
       return matchType && matchSearch;
     });
-  }, [rawDatasetRows, txTypeFilter, searchTx, productMap]);
-
-  // Frequency count of each product in the transactions
-  const datasetFrequencyMap = useMemo(() => {
-    const counts: Record<string, number> = {};
-    for (const tx of transactions) {
-      for (const id of tx.itemIds) {
-        counts[id] = (counts[id] || 0) + 1;
-      }
-    }
-    return counts;
-  }, [transactions]);
+  }, [rawDatasetRows, txTypeFilter, searchTx]);
 
   const sellerCount = allUsers.filter(u => u.role === 'seller').length;
 
@@ -194,19 +260,30 @@ export const AdminDashboard: React.FC = () => {
                 Platform Administrator Console
               </span>
               <span className="text-[10px] bg-white/10 text-white font-semibold px-2 py-0.5 rounded-full border border-white/20">
-                Root System Access
+                Active Governance
               </span>
             </div>
             <h1 className="font-display text-2xl sm:text-3xl font-semibold text-white">
-              ProductGenius Ops & Governance
+              ProductGenius Ops & Campaigns
             </h1>
             <p className="text-xs text-[#E8DDD8] mt-0.5">
-              Supervise transactions, remove products or sellers, and calibrate the Apriori association engine.
+              Launch Festival & Season offers, manage catalog in Rs, oversee merchants, and calibrate the 200-transaction Apriori engine.
             </p>
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
+          <button
+            onClick={() => {
+              setCampaignToEdit(null);
+              setIsCampaignModalOpen(true);
+            }}
+            className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold uppercase tracking-wider rounded-lg border border-amber-500 transition-colors flex items-center gap-1.5 cursor-pointer shadow-sm"
+          >
+            <Gift className="w-4 h-4 text-amber-200" />
+            <span>Launch Campaign</span>
+          </button>
+
           <button
             onClick={() => {
               setProductToEdit(null);
@@ -229,18 +306,31 @@ export const AdminDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* KPI Cards */}
+      {/* KPI Cards in Rupees */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="p-5 bg-white rounded-2xl border border-[#E8DDD8] shadow-sm">
           <div className="flex items-center justify-between text-[#7A5B61] mb-2">
             <span className="text-xs font-semibold uppercase tracking-wider">Gross Sales (GMV)</span>
-            <DollarSign className="w-4 h-4 text-[#5B1423]" />
+            <span className="font-mono text-xs font-bold text-[#5B1423]">Rs</span>
           </div>
           <div className="text-2xl font-bold font-mono text-[#5B1423] tabular-nums">
-            ${totalGMV.toFixed(2)}
+            {formatPrice(totalGMV)}
           </div>
           <div className="text-[11px] text-[#5C4449] mt-1">
-            Across {orders.length} platform transactions
+            Across {orders.length} verified transactions
+          </div>
+        </div>
+
+        <div className="p-5 bg-white rounded-2xl border border-[#E8DDD8] shadow-sm">
+          <div className="flex items-center justify-between text-[#7A5B61] mb-2">
+            <span className="text-xs font-semibold uppercase tracking-wider">Active Campaigns</span>
+            <Gift className="w-4 h-4 text-[#5B1423]" />
+          </div>
+          <div className="text-2xl font-bold font-mono text-[#2D1217] tabular-nums">
+            {campaigns.filter(c => c.isActive).length} Live Offers
+          </div>
+          <div className="text-[11px] text-emerald-700 mt-1 font-medium">
+            Shown below navbar & Apriori showcase
           </div>
         </div>
 
@@ -250,23 +340,10 @@ export const AdminDashboard: React.FC = () => {
             <Package className="w-4 h-4 text-[#5B1423]" />
           </div>
           <div className="text-2xl font-bold font-mono text-[#2D1217] tabular-nums">
-            {products.length} Items
+            {products.length} Items (Rs)
           </div>
           <div className="text-[11px] text-emerald-700 mt-1 font-medium">
-            Full admin removal controls enabled
-          </div>
-        </div>
-
-        <div className="p-5 bg-white rounded-2xl border border-[#E8DDD8] shadow-sm">
-          <div className="flex items-center justify-between text-[#7A5B61] mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider">Active Merchants</span>
-            <Store className="w-4 h-4 text-[#5B1423]" />
-          </div>
-          <div className="text-2xl font-bold font-mono text-[#2D1217] tabular-nums">
-            {sellerCount} Sellers
-          </div>
-          <div className="text-[11px] text-[#5C4449] mt-1">
-            Total {allUsers.length} platform accounts
+            4 Core Categories (Skincare, Makeup, Bodycare, Fragrance)
           </div>
         </div>
 
@@ -279,7 +356,7 @@ export const AdminDashboard: React.FC = () => {
             {associationRules.length} Rules
           </div>
           <div className="text-[11px] text-[#5C4449] mt-1">
-            From {frequentItemsets.length} frequent itemsets
+            From {transactions.length} customer checkout records
           </div>
         </div>
       </div>
@@ -296,6 +373,19 @@ export const AdminDashboard: React.FC = () => {
         >
           <Package className="w-3.5 h-3.5" />
           <span>Manage Products ({products.length})</span>
+        </button>
+
+        {/* User Request 2: Campaign Feature in Admin Dashboard */}
+        <button
+          onClick={() => setActiveAdminTab('campaigns')}
+          className={`flex items-center gap-1.5 px-4 py-2 text-xs font-semibold uppercase tracking-wider rounded-lg transition-colors cursor-pointer whitespace-nowrap ${
+            activeAdminTab === 'campaigns'
+              ? 'bg-[#5B1423] text-white shadow-sm'
+              : 'bg-white text-[#5C4449] hover:bg-[#FCECE9] hover:text-[#5B1423] border border-[#E8DDD8]'
+          }`}
+        >
+          <Gift className="w-3.5 h-3.5 text-amber-500" />
+          <span>Festival & Season Campaigns ({campaigns.length})</span>
         </button>
 
         <button
@@ -331,128 +421,296 @@ export const AdminDashboard: React.FC = () => {
           }`}
         >
           <Database className="w-3.5 h-3.5" />
-          <span>Dataset & Google Products ({transactions.length})</span>
+          <span>Dataset Records ({transactions.length})</span>
         </button>
       </div>
 
-      {/* TAB 1: PRODUCT MANAGEMENT (REMOVE & EDIT PRODUCTS) */}
-      {activeAdminTab === 'products' && (
-        <div className="space-y-4">
+      {/* TAB 1: FESTIVAL & SEASON CAMPAIGNS */}
+      {activeAdminTab === 'campaigns' && (
+        <div className="space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <h3 className="font-display text-xl font-semibold text-[#2D1217]">
-                Platform Product Inventory & Moderation
+                Festival & Season Offer Campaign Control
               </h3>
               <p className="text-xs text-[#5C4449]">
-                Remove products, audit seller attributions, and manage inventory listings
+                Launch, toggle, and schedule seasonal discounts. Active campaigns are immediately displayed in the customer dashboard below the navbar and around the Apriori recommendation section.
               </p>
             </div>
 
-            <div className="flex items-center gap-3">
+            <button
+              onClick={() => {
+                setCampaignToEdit(null);
+                setIsCampaignModalOpen(true);
+              }}
+              className="px-4 py-2 bg-[#5B1423] hover:bg-[#7A1C30] text-white text-xs font-semibold uppercase tracking-wider rounded-lg shadow-sm transition-colors flex items-center gap-1.5 cursor-pointer shrink-0"
+            >
+              <Plus className="w-4 h-4 text-[#F2CAC2]" />
+              <span>Launch New Campaign</span>
+            </button>
+          </div>
+
+          {/* Campaign Cards Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {campaigns.map(camp => {
+              return (
+                <div
+                  key={camp.id}
+                  className={`bg-white rounded-2xl border p-5 shadow-sm flex flex-col justify-between transition-all ${
+                    camp.isActive ? 'border-[#E8DDD8] ring-1 ring-[#5B1423]/10' : 'border-gray-200 opacity-70 bg-gray-50/50'
+                  }`}
+                >
+                  <div className="space-y-3">
+                    {/* Header info */}
+                    <div className="flex items-center justify-between pb-2 border-b border-[#F5EBE6]">
+                      <span
+                        className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                          camp.type === 'festival'
+                            ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                            : 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                        }`}
+                      >
+                        {camp.type === 'festival' ? 'Festival Offer' : 'Season Offer'}
+                      </span>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => toggleCampaignActive(camp.id)}
+                          className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold cursor-pointer transition-colors ${
+                            camp.isActive
+                              ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
+                              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                          }`}
+                          title={camp.isActive ? 'Click to deactivate' : 'Click to activate'}
+                        >
+                          {camp.isActive ? <ToggleRight className="w-4 h-4 text-emerald-700" /> : <ToggleLeft className="w-4 h-4" />}
+                          <span>{camp.isActive ? 'Live in App' : 'Inactive'}</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <h4 className="font-display text-lg font-bold text-[#2D1217] leading-tight">
+                        {camp.title}
+                      </h4>
+                      <p className="text-xs text-[#5C4449] mt-1 line-clamp-2">
+                        {camp.tagline}
+                      </p>
+                    </div>
+
+                    {/* Promo Box */}
+                    <div className="p-3 bg-[#FAF7F2] rounded-xl border border-[#E8DDD8] flex items-center justify-between">
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-[#7A5B61] tracking-wider block">
+                          Coupon Code
+                        </span>
+                        <span className="font-mono text-sm font-extrabold text-[#5B1423]">
+                          {camp.discountCode}
+                        </span>
+                      </div>
+
+                      <div className="text-right">
+                        <span className="text-[10px] uppercase font-bold text-[#7A5B61] tracking-wider block">
+                          Discount
+                        </span>
+                        <span className="font-mono text-base font-bold text-emerald-700">
+                          {camp.discountPercent}% OFF
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Metadata */}
+                    <div className="text-[11px] text-[#7A5B61] space-y-1">
+                      <div className="flex justify-between">
+                        <span>Target:</span>
+                        <strong className="text-[#2D1217]">{camp.featuredCategory}</strong>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Valid Dates:</span>
+                        <span className="font-mono">{camp.startDate} ~ {camp.endDate}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="mt-4 pt-3 border-t border-[#F5EBE6] flex items-center justify-between">
+                    <button
+                      onClick={() => handleCopyCode(camp.discountCode)}
+                      className="text-xs text-[#5B1423] hover:underline flex items-center gap-1 cursor-pointer font-medium"
+                    >
+                      {copiedCode === camp.discountCode ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>Copied!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3.5 h-3.5" />
+                          <span>Copy Code</span>
+                        </>
+                      )}
+                    </button>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => {
+                          setCampaignToEdit(camp);
+                          setIsCampaignModalOpen(true);
+                        }}
+                        className="p-1.5 text-[#5B1423] hover:bg-[#FCECE9] rounded-lg transition-colors cursor-pointer"
+                        title="Edit Campaign"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+
+                      <button
+                        onClick={() => setCampaignToDelete(camp)}
+                        className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                        title="Delete Campaign"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {campaigns.length === 0 && (
+            <div className="p-12 text-center bg-white rounded-2xl border border-[#E8DDD8] space-y-3">
+              <Gift className="w-10 h-10 text-[#7A5B61] mx-auto opacity-60" />
+              <h4 className="text-sm font-semibold text-[#2D1217]">No campaigns created</h4>
+              <p className="text-xs text-[#7A5B61]">
+                Launch festival or season campaigns to attract buyers with coupon discounts.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB 2: MANAGE PRODUCTS */}
+      {activeAdminTab === 'products' && (
+        <div className="space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h3 className="font-display text-xl font-semibold text-[#2D1217]">
+                Catalog Products ({products.length})
+              </h3>
+              <p className="text-xs text-[#5C4449]">
+                Prices configured in Rupees (Rs). Assigned to the 4 core categories: Skincare, Makeup, Bodycare, and Fragrance.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Category Filter */}
+              <select
+                value={categoryFilter}
+                onChange={e => setCategoryFilter(e.target.value)}
+                className="px-3 py-1.5 text-xs bg-white border border-[#E8DDD8] rounded-lg text-[#5C4449] focus:outline-none focus:ring-1 focus:ring-[#7A1C30] cursor-pointer font-medium"
+              >
+                <option value="All">All Categories</option>
+                {uniqueCategories.map(cat => (
+                  <option key={cat} value={cat}>
+                    {cat}
+                  </option>
+                ))}
+              </select>
+
+              {/* Search */}
               <div className="relative">
                 <Search className="w-4 h-4 text-[#7A5B61] absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
-                  placeholder="Search title, SKU, seller..."
+                  placeholder="Search title, SKU..."
                   value={searchProduct}
                   onChange={e => setSearchProduct(e.target.value)}
-                  className="pl-9 pr-3 py-1.5 text-xs bg-white border border-[#E8DDD8] rounded-lg text-[#2D1217] focus:outline-none focus:ring-1 focus:ring-[#7A1C30] w-52 sm:w-64"
+                  className="pl-9 pr-3 py-1.5 text-xs bg-white border border-[#E8DDD8] rounded-lg text-[#2D1217] focus:outline-none focus:ring-1 focus:ring-[#7A1C30] w-48 sm:w-60"
                 />
               </div>
-
-              <select
-                value={categoryFilter}
-                onChange={e => setCategoryFilter(e.target.value)}
-                className="px-3 py-1.5 text-xs bg-white border border-[#E8DDD8] rounded-lg text-[#5C4449] focus:outline-none focus:ring-1 focus:ring-[#7A1C30] cursor-pointer"
-              >
-                <option value="All">All Categories</option>
-                <option value="Fragrance & Bath">Fragrance & Bath</option>
-                <option value="Apparel & Silk">Apparel & Silk</option>
-                <option value="Leather Goods">Leather Goods</option>
-                <option value="Home & Ambiance">Home & Ambiance</option>
-                <option value="Gourmet & Cellar">Gourmet & Cellar</option>
-              </select>
             </div>
           </div>
 
+          {/* Products Table */}
           <div className="bg-white rounded-2xl border border-[#E8DDD8] overflow-hidden shadow-sm">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead className="bg-[#FAF7F2] border-b border-[#E8DDD8] text-[#7A5B61] uppercase tracking-wider font-semibold">
                   <tr>
-                    <th className="py-3 px-4">Item Details</th>
+                    <th className="py-3 px-4">Product Visual & Title</th>
                     <th className="py-3 px-4">Category</th>
-                    <th className="py-3 px-4">Seller / Store</th>
+                    <th className="py-3 px-4">Merchant</th>
                     <th className="py-3 px-4">SKU</th>
-                    <th className="py-3 px-4">Price</th>
+                    <th className="py-3 px-4">Price (Rs)</th>
                     <th className="py-3 px-4">Stock</th>
-                    <th className="py-3 px-4 text-right">Admin Actions</th>
+                    <th className="py-3 px-4 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#F5EBE6]">
-                  {filteredProducts.map(p => (
-                    <tr key={p.id} className="hover:bg-[#FAF7F2]/50 transition-colors">
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-3">
-                          <img
-                            src={p.imageUrl}
-                            alt={p.title}
-                            className="w-11 h-11 rounded-lg object-cover border border-[#E8DDD8]"
-                            referrerPolicy="no-referrer"
-                            onError={(e) => {
-                              (e.target as HTMLElement).style.opacity = '0.5';
-                            }}
-                          />
-                          <div className="max-w-[220px]">
-                            <div className="font-semibold text-[#2D1217] truncate">{p.title}</div>
-                            <div className="text-[10px] text-[#7A5B61] truncate">{p.description}</div>
+                  {filteredProducts.map(p => {
+                    return (
+                      <tr key={p.id} className="hover:bg-[#FAF7F2]/50 transition-colors">
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-3">
+                            <ImageWithFallback
+                              src={p.imageUrl}
+                              alt={p.title}
+                              className="w-11 h-11 rounded-lg border border-[#E8DDD8]"
+                            />
+                            <div className="max-w-[220px]">
+                              <div className="font-semibold text-[#2D1217] truncate">{p.title}</div>
+                              <div className="text-[10px] text-[#7A5B61] truncate">{p.description}</div>
+                            </div>
                           </div>
-                        </div>
-                      </td>
+                        </td>
 
-                      <td className="py-3 px-4 text-[#5C4449]">{p.category}</td>
+                        <td className="py-3 px-4">
+                          <span className="font-bold text-[#5B1423]">{p.category}</span>
+                        </td>
 
-                      <td className="py-3 px-4">
-                        <span className="font-medium text-[#5B1423] bg-[#FCECE9] px-2 py-0.5 rounded text-[11px]">
-                          {p.sellerName || 'Atelier Bordeaux'}
-                        </span>
-                      </td>
+                        <td className="py-3 px-4 text-[#5C4449]">
+                          {p.sellerName || 'Atelier Bordeaux & Co.'}
+                        </td>
 
-                      <td className="py-3 px-4 font-mono text-[#5C4449]">{p.sku}</td>
+                        <td className="py-3 px-4 font-mono text-[#5C4449]">{p.sku}</td>
 
-                      <td className="py-3 px-4 font-mono font-bold text-[#5B1423]">${p.price.toFixed(2)}</td>
+                        <td className="py-3 px-4 font-mono font-bold text-[#5B1423]">
+                          {formatPrice(p.price)}
+                        </td>
 
-                      <td className="py-3 px-4 font-mono">
-                        <span className={p.stockCount <= 5 ? 'text-amber-700 font-bold' : 'text-[#2D1217]'}>
-                          {p.stockCount} in stock
-                        </span>
-                      </td>
+                        <td className="py-3 px-4 font-mono">
+                          <span className={p.stockCount <= 5 ? 'text-amber-700 font-bold' : 'text-[#2D1217]'}>
+                            {p.stockCount} in stock
+                          </span>
+                        </td>
 
-                      <td className="py-3 px-4 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <button
-                            onClick={() => {
-                              setProductToEdit(p);
-                              setIsProductFormOpen(true);
-                            }}
-                            className="p-1.5 text-[#5B1423] hover:bg-[#FCECE9] rounded-lg transition-colors cursor-pointer"
-                            title="Edit Product"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
+                        <td className="py-3 px-4 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              onClick={() => {
+                                setProductToEdit(p);
+                                setIsProductFormOpen(true);
+                              }}
+                              className="p-1.5 text-[#5B1423] hover:bg-[#FCECE9] rounded-lg transition-colors cursor-pointer"
+                              title="Edit Product"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
 
-                          <button
-                            onClick={() => setProductToDelete(p)}
-                            className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
-                            title="Remove Product from Platform"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                            <span>Remove</span>
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                            <button
+                              onClick={() => setProductToDelete(p)}
+                              className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                              title="Remove Product"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              <span>Remove</span>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -463,10 +721,85 @@ export const AdminDashboard: React.FC = () => {
               </div>
             )}
           </div>
+
+          {/* Orders Fulfillment & Delivery Management */}
+          <div className="bg-white rounded-2xl border border-[#E8DDD8] p-5 shadow-sm space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#F5EBE6] pb-3">
+              <div>
+                <h4 className="font-display text-base font-semibold text-[#2D1217]">
+                  Customer Orders & Delivery Status Management
+                </h4>
+                <p className="text-xs text-[#5C4449]">
+                  Delivered orders automatically enrich the Apriori transaction dataset in Rupees.
+                </p>
+              </div>
+              <span className="text-[11px] font-mono text-[#5B1423] bg-[#FCECE9] px-2.5 py-1 rounded-md font-semibold">
+                {orders.filter(o => o.status === 'Delivered').length} Delivered / {orders.length} Total
+              </span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-[#FAF7F2] border-b border-[#E8DDD8] text-[#7A5B61] uppercase tracking-wider font-semibold">
+                  <tr>
+                    <th className="py-2.5 px-3">Order ID</th>
+                    <th className="py-2.5 px-3">Customer</th>
+                    <th className="py-2.5 px-3">Basket Items</th>
+                    <th className="py-2.5 px-3">Total (Rs)</th>
+                    <th className="py-2.5 px-3">Status</th>
+                    <th className="py-2.5 px-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#F5EBE6]">
+                  {orders.map(order => {
+                    const isDeliv = order.status === 'Delivered';
+                    return (
+                      <tr key={order.id} className="hover:bg-[#FAF7F2]/50">
+                        <td className="py-2.5 px-3 font-mono font-bold text-[#5B1423]">{order.id}</td>
+                        <td className="py-2.5 px-3 text-[#2D1217]">{order.customerName}</td>
+                        <td className="py-2.5 px-3 text-[#5C4449] max-w-xs truncate">
+                          {order.items.map(i => `${i.quantity}x ${i.title.split(' ')[0]}`).join(', ')}
+                        </td>
+                        <td className="py-2.5 px-3 font-mono font-bold text-[#5B1423]">
+                          {formatPrice(order.total)}
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
+                              isDeliv
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : order.status === 'Shipped'
+                                ? 'bg-sky-100 text-sky-800'
+                                : 'bg-amber-100 text-amber-800'
+                            }`}
+                          >
+                            {order.status}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 text-right">
+                          {!isDeliv && (
+                            <button
+                              onClick={() => {
+                                updateOrderStatus(order.id, 'Delivered');
+                                showToast(`Order ${order.id} marked Delivered and added to Apriori Database!`);
+                              }}
+                              className="px-2.5 py-1 bg-[#5B1423] hover:bg-[#7A1C30] text-white text-[11px] font-semibold rounded shadow-xs cursor-pointer"
+                            >
+                              Deliver & Ingest
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       )}
 
-      {/* TAB 2: SELLER & USER MANAGEMENT (REMOVE SELLERS) */}
+      {/* TAB 3: SELLERS & USERS */}
       {activeAdminTab === 'sellers' && (
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -587,7 +920,6 @@ export const AdminDashboard: React.FC = () => {
                               Assume {user.role}
                             </button>
 
-                            {/* Remove Seller Button */}
                             {isSeller && (
                               <button
                                 onClick={() => {
@@ -595,14 +927,13 @@ export const AdminDashboard: React.FC = () => {
                                   setRemoveSellerProducts(true);
                                 }}
                                 className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-md text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
-                                title="Remove Seller and their Store"
+                                title="Remove Seller"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                                 <span>Remove Seller</span>
                               </button>
                             )}
 
-                            {/* Remove non-admin user */}
                             {!isAdmin && !isSeller && (
                               <button
                                 onClick={() => deleteUser(user.id)}
@@ -620,21 +951,14 @@ export const AdminDashboard: React.FC = () => {
                 </tbody>
               </table>
             </div>
-
-            {filteredUsers.length === 0 && (
-              <div className="p-12 text-center text-xs text-[#7A5B61]">
-                No users or merchants found matching search criteria.
-              </div>
-            )}
           </div>
         </div>
       )}
 
-      {/* TAB 3: APRIORI MINING ENGINE STUDIO */}
+      {/* TAB 4: APRIORI MINING ENGINE */}
       {activeAdminTab === 'apriori' && (
         <div className="space-y-8">
-          
-          {/* Hyperparameter Controls Console */}
+          {/* Controls Console */}
           <div className="bg-white p-6 sm:p-8 rounded-2xl border border-[#E8DDD8] shadow-sm space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#F5EBE6] pb-4">
               <div>
@@ -644,6 +968,9 @@ export const AdminDashboard: React.FC = () => {
                 <h3 className="font-display text-2xl font-semibold text-[#2D1217]">
                   Apriori Association Engine Calibration
                 </h3>
+                <p className="text-xs text-[#5C4449] mt-1">
+                  Mining market baskets across {transactions.length} customer checkout records in Skincare, Makeup, Bodycare, and Fragrance.
+                </p>
               </div>
 
               <button
@@ -652,7 +979,7 @@ export const AdminDashboard: React.FC = () => {
                 className="px-5 py-2.5 bg-[#5B1423] hover:bg-[#7A1C30] text-white text-xs font-semibold uppercase tracking-wider rounded-lg shadow-md transition-all flex items-center gap-2 cursor-pointer"
               >
                 <RefreshCw className={`w-4 h-4 ${isMining ? 'animate-spin' : ''}`} />
-                <span>{isMining ? 'Mining Frequent Itemsets...' : 'Re-Mine Association Rules'}</span>
+                <span>{isMining ? 'Mining 200 Transactions...' : 'Re-Mine Association Rules'}</span>
               </button>
             </div>
 
@@ -669,15 +996,15 @@ export const AdminDashboard: React.FC = () => {
                 </div>
                 <input
                   type="range"
-                  min="0.05"
-                  max="0.50"
-                  step="0.05"
+                  min="0.02"
+                  max="0.30"
+                  step="0.01"
                   value={minSupport}
                   onChange={e => setMinSupport(parseFloat(e.target.value))}
                   className="w-full accent-[#5B1423] cursor-pointer"
                 />
                 <p className="text-[11px] text-[#5C4449] leading-snug">
-                  Itemsets must appear in at least <strong>{Math.ceil(minSupport * transactions.length)}</strong> of {transactions.length} total baskets to be deemed frequent.
+                  Itemsets must appear in at least <strong>{Math.ceil(minSupport * transactions.length)}</strong> of {transactions.length} total orders to be considered frequent.
                 </p>
               </div>
 
@@ -693,449 +1020,154 @@ export const AdminDashboard: React.FC = () => {
                 </div>
                 <input
                   type="range"
-                  min="0.30"
-                  max="0.90"
+                  min="0.20"
+                  max="0.80"
                   step="0.05"
                   value={minConfidence}
                   onChange={e => setMinConfidence(parseFloat(e.target.value))}
                   className="w-full accent-[#5B1423] cursor-pointer"
                 />
                 <p className="text-[11px] text-[#5C4449] leading-snug">
-                  When Antecedent A is purchased, Consequent B must be co-purchased at least <strong>{(minConfidence * 100).toFixed(0)}%</strong> of the time to generate a recommendation.
+                  Rules A → B must hold true in at least <strong>{(minConfidence * 100).toFixed(0)}%</strong> of transactions containing itemset A.
                 </p>
               </div>
             </div>
           </div>
 
           {/* Mined Association Rules Table */}
-          <div className="space-y-4">
-            <div>
-              <h3 className="font-display text-xl font-semibold text-[#2D1217]">
-                Discovered Association Rules ({associationRules.length})
-              </h3>
-              <p className="text-xs text-[#5C4449]">
-                Sorted by Confidence descending, then by Support descending
-              </p>
-            </div>
-
-            <div className="bg-white rounded-2xl border border-[#E8DDD8] overflow-hidden shadow-sm">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-[#FAF7F2] border-b border-[#E8DDD8] text-[#7A5B61] uppercase tracking-wider font-semibold">
-                    <tr>
-                      <th className="py-3 px-4">Antecedent (Condition A)</th>
-                      <th className="py-3 px-4">Consequent (Output B)</th>
-                      <th className="py-3 px-4">Support</th>
-                      <th className="py-3 px-4">Confidence</th>
-                      <th className="py-3 px-4">Lift</th>
-                      <th className="py-3 px-4">Basket Matches</th>
-                      <th className="py-3 px-4 text-right">Derivation</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#F5EBE6]">
-                    {associationRules.map(rule => {
-                      const antecedentTitles = rule.antecedent
-                        .map(id => productMap.get(id)?.title.split(' ')[0] || id)
-                        .join(' + ');
-                      const consequentTitles = rule.consequent
-                        .map(id => productMap.get(id)?.title.split(' ')[0] || id)
-                        .join(' + ');
-
-                      const confPct = Math.round(rule.confidence * 100);
-                      const supPct = Math.round(rule.support * 100);
-
-                      return (
-                        <tr key={rule.id} className="hover:bg-[#FAF7F2]/50 transition-colors">
-                          <td className="py-3 px-4 font-semibold text-[#2D1217]">
-                            {`{ ${antecedentTitles} }`}
-                          </td>
-
-                          <td className="py-3 px-4 font-semibold text-[#5B1423]">
-                            {`{ ${consequentTitles} }`}
-                          </td>
-
-                          <td className="py-3 px-4 font-mono font-medium text-[#5C4449]">
-                            {supPct}%
-                          </td>
-
-                          <td className="py-3 px-4 font-mono">
-                            <span className="bg-[#FCECE9] text-[#5B1423] font-bold px-2 py-0.5 rounded">
-                              {confPct}%
-                            </span>
-                          </td>
-
-                          <td className="py-3 px-4 font-mono font-bold text-[#2D1217]">
-                            <span className={rule.lift > 1.2 ? 'text-emerald-700' : 'text-[#5C4449]'}>
-                              {rule.lift}x
-                            </span>
-                          </td>
-
-                          <td className="py-3 px-4 font-mono text-[#5C4449]">
-                            {rule.transactionCount} baskets
-                          </td>
-
-                          <td className="py-3 px-4 text-right">
-                            <button
-                              onClick={() => setActiveMathModalRule(rule)}
-                              className="text-[#7A1C30] hover:underline font-medium cursor-pointer"
-                            >
-                              Proof Details →
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+          <div className="bg-white rounded-2xl border border-[#E8DDD8] overflow-hidden shadow-sm">
+            <div className="p-4 bg-[#FAF7F2] border-b border-[#E8DDD8] flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-[#5B1423]" />
+                <h4 className="font-semibold text-xs uppercase tracking-wider text-[#2D1217]">
+                  Mined Association Rules ({associationRules.length})
+                </h4>
               </div>
             </div>
-          </div>
 
-          {/* Frequent Itemsets Discovery Table */}
-          <div className="space-y-4">
-            <div>
-              <h3 className="font-display text-xl font-semibold text-[#2D1217]">
-                Frequent Itemsets Mined ({frequentItemsets.length})
-              </h3>
-              <p className="text-xs text-[#5C4449]">
-                Itemsets meeting minimum support threshold &ge; {(minSupport * 100).toFixed(0)}%
-              </p>
-            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-[#FAF7F2] border-b border-[#E8DDD8] text-[#7A5B61] uppercase tracking-wider font-semibold">
+                  <tr>
+                    <th className="py-2.5 px-4">Antecedent (If Bought)</th>
+                    <th className="py-2.5 px-4">Consequent (Recommended)</th>
+                    <th className="py-2.5 px-4 font-mono">Support</th>
+                    <th className="py-2.5 px-4 font-mono">Confidence</th>
+                    <th className="py-2.5 px-4 font-mono">Lift</th>
+                    <th className="py-2.5 px-4 text-right">Proof</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#F5EBE6]">
+                  {associationRules.slice(0, 15).map(rule => {
+                    const ante = rule.antecedent.map(id => productMap.get(id)?.title || id).join(' + ');
+                    const cons = rule.consequent.map(id => productMap.get(id)?.title || id).join(' + ');
 
-            <div className="bg-white rounded-2xl border border-[#E8DDD8] overflow-hidden shadow-sm">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-[#FAF7F2] border-b border-[#E8DDD8] text-[#7A5B61] uppercase tracking-wider font-semibold">
-                    <tr>
-                      <th className="py-3 px-4">Itemset Items</th>
-                      <th className="py-3 px-4">Size (k)</th>
-                      <th className="py-3 px-4">Frequency Count</th>
-                      <th className="py-3 px-4">Support</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#F5EBE6]">
-                    {frequentItemsets.map((fi, idx) => {
-                      const itemTitles = fi.items
-                        .map(id => productMap.get(id)?.title || id)
-                        .join(' · ');
-
-                      return (
-                        <tr key={idx} className="hover:bg-[#FAF7F2]/50 transition-colors">
-                          <td className="py-3 px-4 font-medium text-[#2D1217]">
-                            {itemTitles}
-                          </td>
-                          <td className="py-3 px-4 font-mono text-[#5C4449]">
-                            k = {fi.items.length}
-                          </td>
-                          <td className="py-3 px-4 font-mono font-bold text-[#5B1423]">
-                            {fi.supportCount}
-                          </td>
-                          <td className="py-3 px-4 font-mono text-[#5C4449]">
-                            {(fi.support * 100).toFixed(1)}%
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                    return (
+                      <tr key={rule.id} className="hover:bg-[#FAF7F2]/50">
+                        <td className="py-2.5 px-4 font-medium text-[#2D1217] max-w-xs truncate">{ante}</td>
+                        <td className="py-2.5 px-4 font-bold text-[#5B1423] max-w-xs truncate">{cons}</td>
+                        <td className="py-2.5 px-4 font-mono">{(rule.support * 100).toFixed(1)}%</td>
+                        <td className="py-2.5 px-4 font-mono font-bold text-[#5B1423]">
+                          {(rule.confidence * 100).toFixed(1)}%
+                        </td>
+                        <td className="py-2.5 px-4 font-mono">
+                          <span className={rule.lift > 1 ? 'text-emerald-700 font-bold' : ''}>
+                            {rule.lift}x
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-4 text-right">
+                          <button
+                            onClick={() => setActiveMathModalRule(rule)}
+                            className="text-[#7A1C30] hover:underline font-medium text-[11px] cursor-pointer"
+                          >
+                            Inspect Math
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           </div>
-
         </div>
       )}
 
-      {/* TAB 4: PREPARED DATASET & GOOGLE SEARCH ADJUSTMENTS */}
+      {/* TAB 5: DATASET RECORDS */}
       {activeAdminTab === 'transactions' && (
-        <div className="space-y-6">
-          
-          {/* Header Card */}
-          <div className="p-6 bg-white rounded-2xl border border-[#E8DDD8] shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-            <div className="space-y-1 max-w-2xl">
-              <div className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-[#5B1423] uppercase tracking-wider bg-[#FCECE9] px-2.5 py-0.5 rounded-full border border-[#F2CAC2]">
-                <Sparkles className="w-3.5 h-3.5 text-[#7A1C30]" />
-                <span>Google Search Verified Adjustments & ML Apriori Engine</span>
-              </div>
-              <h3 className="font-display text-2xl font-semibold text-[#2D1217]">
-                Prepared Dataset & Google Search Product Intelligence
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h3 className="font-display text-xl font-semibold text-[#2D1217]">
+                User Dataset Records ({rawDatasetRows.length} Rows)
               </h3>
-              <p className="text-xs text-[#5C4449] leading-relaxed">
-                Raw customer basket records (T0001–T00100) adjusted to high-end boutique personal care products benchmarked against real Google Search shopping queries, market pricing, and active cosmetic formulations.
+              <p className="text-xs text-[#5C4449]">
+                Raw user checkout transactions T0001 to T0200 mapped to Skincare, Makeup, Bodycare, and Fragrance.
               </p>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+            <div className="flex items-center gap-3">
               <button
                 onClick={() => {
                   resetToGoogleAdjustedDataset();
-                  showToast("Dataset successfully reset to user's 100-transaction data and Google-adjusted products!");
+                  showToast('Reset dataset to initial 200 user transactions.');
                 }}
-                className="px-3.5 py-2 bg-white hover:bg-[#FAF7F2] text-[#5B1423] border border-[#E8DDD8] text-xs font-semibold rounded-lg shadow-sm transition-colors flex items-center gap-1.5 cursor-pointer"
-                title="Reset products and transactions to the 100 prepared rows"
+                className="px-3 py-1.5 bg-white border border-[#E8DDD8] rounded-lg text-xs font-semibold text-[#5C4449] hover:bg-[#FCECE9] cursor-pointer"
               >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span>Reset User Dataset</span>
+                Reset to 200 Rows
               </button>
 
               <button
                 onClick={() => setIsRawDatasetModalOpen(true)}
-                className="px-3.5 py-2 bg-white hover:bg-[#FAF7F2] text-[#2D1217] border border-[#E8DDD8] text-xs font-semibold rounded-lg shadow-sm transition-colors flex items-center gap-1.5 cursor-pointer"
+                className="px-3.5 py-1.5 bg-[#5B1423] text-white rounded-lg text-xs font-semibold hover:bg-[#7A1C30] cursor-pointer flex items-center gap-1.5"
               >
-                <FileText className="w-3.5 h-3.5 text-[#7A5B61]" />
-                <span>View Raw TSV ({rawDatasetRows.length} Rows)</span>
-              </button>
-
-              <button
-                onClick={handleRunMining}
-                disabled={isMining}
-                className="px-4 py-2 bg-[#5B1423] hover:bg-[#7A1C30] text-white text-xs font-semibold uppercase tracking-wider rounded-lg shadow-sm transition-colors flex items-center gap-1.5 cursor-pointer"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${isMining ? 'animate-spin' : ''}`} />
-                <span>Re-Mine Rules</span>
+                <FileText className="w-3.5 h-3.5" />
+                <span>View / Edit Raw Data</span>
               </button>
             </div>
           </div>
 
-          {/* Sub-tab Navigation */}
-          <div className="flex items-center gap-2 border-b border-[#E8DDD8] pb-3">
-            <button
-              onClick={() => setDatasetSubTab('transactions')}
-              className={`px-4 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer ${
-                datasetSubTab === 'transactions'
-                  ? 'bg-[#5B1423] text-white'
-                  : 'bg-white text-[#5C4449] hover:bg-[#FAF7F2] border border-[#E8DDD8]'
-              }`}
-            >
-              100-Transaction Inspector ({filteredRawRows.length})
-            </button>
-            <button
-              onClick={() => setDatasetSubTab('mappings')}
-              className={`px-4 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer ${
-                datasetSubTab === 'mappings'
-                  ? 'bg-[#5B1423] text-white'
-                  : 'bg-white text-[#5C4449] hover:bg-[#FAF7F2] border border-[#E8DDD8]'
-              }`}
-            >
-              12 Google Search Adjusted Products Matrix
-            </button>
-          </div>
-
-          {/* SUBTAB 1: 100-TRANSACTION INSPECTOR */}
-          {datasetSubTab === 'transactions' && (
-            <div className="space-y-4">
-              
-              {/* Search & Filters */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-xl border border-[#E8DDD8]">
-                <div className="relative flex-1 max-w-md">
-                  <Search className="w-4 h-4 text-[#7A5B61] absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    placeholder="Search transaction ID, customer ID, or products..."
-                    value={searchTx}
-                    onChange={e => setSearchTx(e.target.value)}
-                    className="w-full pl-9 pr-3 py-1.5 text-xs bg-[#FAF7F2] border border-[#E8DDD8] rounded-lg text-[#2D1217] focus:outline-none focus:ring-1 focus:ring-[#7A1C30]"
-                  />
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-[#7A5B61] font-medium">Type:</span>
-                  <select
-                    value={txTypeFilter}
-                    onChange={e => setTxTypeFilter(e.target.value)}
-                    className="px-3 py-1.5 text-xs bg-[#FAF7F2] border border-[#E8DDD8] rounded-lg text-[#2D1217] focus:outline-none focus:ring-1 focus:ring-[#7A1C30] cursor-pointer"
-                  >
-                    <option value="all">All Types</option>
-                    <option value="Strong">Strong Affinity</option>
-                    <option value="Mixed">Mixed Baskets</option>
-                    <option value="Random">Random / Discovery</option>
-                    <option value="Online">Online Orders</option>
-                    <option value="Store">In-Store Purchases</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Transactions Table */}
-              <div className="bg-white rounded-2xl border border-[#E8DDD8] overflow-hidden shadow-sm">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-[#FAF7F2] border-b border-[#E8DDD8] text-[#7A5B61] uppercase tracking-wider font-semibold">
-                      <tr>
-                        <th className="py-3 px-4">Tx ID</th>
-                        <th className="py-3 px-4">Customer</th>
-                        <th className="py-3 px-4">Date</th>
-                        <th className="py-3 px-4">Type</th>
-                        <th className="py-3 px-4">Raw Purchased Mention</th>
-                        <th className="py-3 px-4">Adjusted Google Products</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#F5EBE6]">
-                      {filteredRawRows.length === 0 ? (
-                        <tr>
-                          <td colSpan={6} className="py-8 text-center text-[#7A5B61]">
-                            No transactions match your search filter.
-                          </td>
-                        </tr>
-                      ) : (
-                        filteredRawRows.map(row => {
-                          const typeLower = row.type.toLowerCase().trim();
-                          const typeBadgeClass =
-                            typeLower.includes('strong')
-                              ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
-                              : typeLower.includes('mixed')
-                              ? 'bg-amber-100 text-amber-800 border-amber-300'
-                              : typeLower.includes('random')
-                              ? 'bg-purple-100 text-purple-800 border-purple-300'
-                              : typeLower.includes('store')
-                              ? 'bg-rose-100 text-rose-800 border-rose-300'
-                              : 'bg-sky-100 text-sky-800 border-sky-300';
-
-                          return (
-                            <tr key={row.transaction_id} className="hover:bg-[#FAF7F2]/60 transition-colors">
-                              <td className="py-3 px-4 font-mono font-bold text-[#5B1423] whitespace-nowrap">
-                                {row.transaction_id}
-                              </td>
-                              <td className="py-3 px-4 font-mono text-[#5C4449] whitespace-nowrap">
-                                {row.customer_id || '—'}
-                              </td>
-                              <td className="py-3 px-4 text-[#5C4449] whitespace-nowrap">
-                                {row.transaction_date}
-                              </td>
-                              <td className="py-3 px-4 whitespace-nowrap">
-                                <span className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${typeBadgeClass}`}>
-                                  {row.type}
-                                </span>
-                              </td>
-                              <td className="py-3 px-4 text-[#2D1217] font-mono text-[11px] max-w-xs truncate" title={row.products_purchased}>
-                                {row.products_purchased}
-                              </td>
-                              <td className="py-3 px-4">
-                                <div className="flex flex-wrap gap-1.5">
-                                  {row.matchedProductIds.map(id => {
-                                    const p = productMap.get(id);
-                                    if (!p) return null;
-                                    return (
-                                      <span
-                                        key={id}
-                                        className="inline-flex items-center gap-1.5 bg-[#FAF7F2] border border-[#E8DDD8] text-[#2D1217] px-2 py-0.5 rounded text-[11px]"
-                                      >
-                                        <img
-                                          src={p.imageUrl}
-                                          alt=""
-                                          className="w-3.5 h-3.5 rounded object-cover"
-                                        />
-                                        <span>{p.title.split(' ')[0]} {p.title.split(' ')[1]}</span>
-                                      </span>
-                                    );
-                                  })}
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        })
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-            </div>
-          )}
-
-          {/* SUBTAB 2: 12 GOOGLE SEARCH ADJUSTED PRODUCTS MATRIX */}
-          {datasetSubTab === 'mappings' && (
-            <div className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {products.filter(p => p.googleSearchMatchedTerm).map(p => {
-                  const freq = datasetFrequencyMap[p.id] || 0;
-                  return (
-                    <div
-                      key={p.id}
-                      className="bg-white rounded-2xl border border-[#E8DDD8] p-5 shadow-sm space-y-3 flex flex-col justify-between"
-                    >
-                      <div className="space-y-2">
-                        <div className="flex items-start gap-3">
-                          <img
-                            src={p.imageUrl}
-                            alt={p.title}
-                            className="w-16 h-16 rounded-xl object-cover border border-[#E8DDD8] shrink-0"
-                          />
-                          <div className="min-w-0 flex-1">
-                            <span className="text-[10px] uppercase font-semibold text-[#5B1423] bg-[#FCECE9] px-2 py-0.5 rounded border border-[#F2CAC2]">
-                              Dataset: {p.googleSearchMatchedTerm}
-                            </span>
-                            <h4 className="font-display text-sm font-semibold text-[#2D1217] truncate mt-1">
-                              {p.title}
-                            </h4>
-                            <div className="text-[11px] text-[#7A5B61]">
-                              SKU: {p.sku} · Store Price: <strong className="text-[#5B1423]">${p.price.toFixed(2)}</strong>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Google Search Intelligence Specs */}
-                        <div className="p-3 bg-[#FAF7F2] rounded-xl border border-[#E8DDD8] space-y-1.5 text-[11px]">
-                          <div>
-                            <span className="text-[#7A5B61] text-[10px] uppercase font-semibold block">Google Query Benchmark:</span>
-                            <span className="font-mono text-[#2D1217] italic text-[10px]">
-                              "{p.googleSearchQuery}"
-                            </span>
-                          </div>
-
-                          {p.googleBenchmarkPrice && (
-                            <div className="flex items-center justify-between text-[10px]">
-                              <span className="text-[#7A5B61]">Google Shopping Price:</span>
-                              <span className="font-mono font-bold text-[#5B1423]">
-                                ${p.googleBenchmarkPrice.toFixed(2)} (Save ${(p.googleBenchmarkPrice - p.price).toFixed(2)})
-                              </span>
-                            </div>
-                          )}
-
-                          {p.googleSearchTrends && (
-                            <div className="text-[10px] text-emerald-700 font-medium">
-                              📈 {p.googleSearchTrends}
-                            </div>
-                          )}
-
-                          {p.googleActiveIngredients && (
-                            <div className="pt-1 border-t border-[#E8DDD8]/80">
-                              <span className="text-[#7A5B61] text-[10px] uppercase font-semibold block mb-0.5">Formulation Specs:</span>
-                              <div className="flex flex-wrap gap-1">
-                                {p.googleActiveIngredients.map((ing, i) => (
-                                  <span key={i} className="bg-white border border-[#E8DDD8] px-1.5 py-0.5 rounded text-[9px] text-[#2D1217]">
-                                    {ing}
-                                  </span>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Dataset Occurrence Footnote */}
-                      <div className="pt-2 border-t border-[#F5EBE6] flex items-center justify-between text-[11px]">
-                        <span className="text-[#7A5B61]">User Dataset Frequency:</span>
-                        <span className="font-mono font-bold text-[#5B1423] bg-[#FCECE9] px-2 py-0.5 rounded">
-                          {freq} / {transactions.length} baskets ({((freq / Math.max(1, transactions.length)) * 100).toFixed(0)}%)
+          <div className="bg-white rounded-2xl border border-[#E8DDD8] overflow-hidden shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-[#FAF7F2] border-b border-[#E8DDD8] text-[#7A5B61] uppercase tracking-wider font-semibold">
+                  <tr>
+                    <th className="py-2.5 px-4 font-mono">TX ID</th>
+                    <th className="py-2.5 px-4">Purchased Products (Raw Tokens)</th>
+                    <th className="py-2.5 px-4">Matched IDs</th>
+                    <th className="py-2.5 px-4">Pattern Type</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#F5EBE6]">
+                  {filteredTransactions.slice(0, 30).map(row => (
+                    <tr key={row.transaction_id} className="hover:bg-[#FAF7F2]/50">
+                      <td className="py-2.5 px-4 font-mono font-bold text-[#5B1423]">{row.transaction_id}</td>
+                      <td className="py-2.5 px-4 text-[#2D1217]">{row.products_purchased}</td>
+                      <td className="py-2.5 px-4 font-mono text-[11px] text-[#7A5B61]">
+                        {row.matchedProductIds.join(', ')}
+                      </td>
+                      <td className="py-2.5 px-4">
+                        <span className="bg-[#FCECE9] text-[#5B1423] px-2 py-0.5 rounded text-[10px] font-semibold">
+                          {row.type}
                         </span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          )}
-
+          </div>
         </div>
       )}
 
-      {/* RAW TSV DATASET MODAL */}
+      {/* RAW DATASET MODAL */}
       {isRawDatasetModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-[#FAF7F2] w-full max-w-3xl rounded-2xl shadow-2xl border border-[#E8DDD8] overflow-hidden flex flex-col max-h-[90vh]">
+          <div className="bg-[#FAF7F2] w-full max-w-2xl rounded-2xl shadow-2xl border border-[#E8DDD8] overflow-hidden max-h-[85vh] flex flex-col">
             <div className="bg-[#5B1423] text-white p-5 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <FileText className="w-5 h-5 text-[#F2CAC2]" />
-                <h3 className="font-display text-lg font-semibold">User Dataset Text (TSV / CSV)</h3>
+                <Database className="w-5 h-5 text-[#F2CAC2]" />
+                <h3 className="font-display text-lg font-semibold">200-Transaction Dataset Editor</h3>
               </div>
               <button
                 onClick={() => setIsRawDatasetModalOpen(false)}
@@ -1146,8 +1178,8 @@ export const AdminDashboard: React.FC = () => {
             </div>
 
             <div className="p-6 space-y-4 text-xs overflow-y-auto flex-1">
-              <p className="text-[#5C4449] leading-relaxed">
-                This raw dataset is parsed into co-purchase basket records. Product tokens like "Hydrating Cleanser", "SPF50 Sunscreen", and variations ("Lipstick Cream", "SPF50 Sunscreen Mini Gel") are automatically matched with Google Search adjusted products.
+              <p className="text-[#5C4449]">
+                Format: <code>T0001 | Hydrating Cleanser, Daily Moisturizer, SPF50 Sunscreen</code>
               </p>
 
               <textarea
@@ -1163,29 +1195,20 @@ export const AdminDashboard: React.FC = () => {
                   onClick={() => setDatasetInputText(RAW_DATASET_TEXT)}
                   className="px-3 py-1.5 bg-white text-[#5B1423] border border-[#E8DDD8] rounded-lg text-xs font-medium cursor-pointer"
                 >
-                  Reset to Original 100 Rows
+                  Reset to 200 Transactions
                 </button>
 
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsRawDatasetModalOpen(false)}
-                    className="px-4 py-2 bg-white hover:bg-[#FAF7F2] text-[#5C4449] border border-[#E8DDD8] rounded-lg font-medium cursor-pointer"
-                  >
-                    Close
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const res = importDatasetText(datasetInputText);
-                      setIsRawDatasetModalOpen(false);
-                      showToast(`Successfully parsed and loaded ${res.count} transactions!`);
-                    }}
-                    className="px-4 py-2 bg-[#5B1423] hover:bg-[#7A1C30] text-white font-semibold rounded-lg shadow-sm cursor-pointer"
-                  >
-                    Apply & Re-mine Rules
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const res = importDatasetText(datasetInputText);
+                    setIsRawDatasetModalOpen(false);
+                    showToast(`Successfully parsed and loaded ${res.count} transactions!`);
+                  }}
+                  className="px-4 py-2 bg-[#5B1423] hover:bg-[#7A1C30] text-white font-semibold rounded-lg shadow-sm cursor-pointer"
+                >
+                  Apply & Re-mine Rules
+                </button>
               </div>
             </div>
           </div>
@@ -1211,26 +1234,23 @@ export const AdminDashboard: React.FC = () => {
 
             <div className="p-6 space-y-4 text-xs">
               <div className="flex items-center gap-3 p-3 bg-white rounded-xl border border-[#E8DDD8]">
-                <img
+                <ImageWithFallback
                   src={productToDelete.imageUrl}
                   alt={productToDelete.title}
-                  className="w-14 h-14 rounded-lg object-cover border border-[#E8DDD8]"
+                  className="w-14 h-14 rounded-lg border border-[#E8DDD8]"
                 />
                 <div className="min-w-0">
                   <div className="font-semibold text-sm text-[#2D1217] truncate">
                     {productToDelete.title}
                   </div>
                   <div className="text-[#7A5B61] text-[11px]">
-                    SKU: {productToDelete.sku} · ${productToDelete.price.toFixed(2)}
-                  </div>
-                  <div className="text-[10px] text-[#5B1423] font-medium">
-                    Seller: {productToDelete.sellerName}
+                    SKU: {productToDelete.sku} · {formatPrice(productToDelete.price)}
                   </div>
                 </div>
               </div>
 
-              <p className="text-[#5C4449] leading-relaxed">
-                Are you sure you want to delete this product? It will be immediately removed from the customer storefront, active shopping bags, saved wishlists, and future Apriori association mining.
+              <p className="text-[#5C4449]">
+                Are you sure you want to permanently delete this product?
               </p>
 
               <div className="pt-2 flex justify-end gap-3">
@@ -1246,7 +1266,7 @@ export const AdminDashboard: React.FC = () => {
                   onClick={handleConfirmDeleteProduct}
                   className="px-4 py-2 bg-rose-700 hover:bg-rose-800 text-white font-semibold uppercase tracking-wider rounded-lg shadow-sm cursor-pointer"
                 >
-                  Yes, Remove Product
+                  Confirm Delete
                 </button>
               </div>
             </div>
@@ -1261,7 +1281,7 @@ export const AdminDashboard: React.FC = () => {
             <div className="bg-rose-900 text-white p-5 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <AlertTriangle className="w-5 h-5 text-rose-300" />
-                <h3 className="font-display text-lg font-semibold">Remove Seller Account</h3>
+                <h3 className="font-display text-lg font-semibold">Remove Seller</h3>
               </div>
               <button
                 onClick={() => setSellerToDelete(null)}
@@ -1272,32 +1292,9 @@ export const AdminDashboard: React.FC = () => {
             </div>
 
             <div className="p-6 space-y-4 text-xs">
-              <div className="p-3 bg-white rounded-xl border border-[#E8DDD8] space-y-1">
-                <div className="font-semibold text-sm text-[#2D1217]">
-                  {sellerToDelete.storeName || sellerToDelete.name}
-                </div>
-                <div className="text-[11px] text-[#7A5B61]">Curator: {sellerToDelete.name} ({sellerToDelete.email})</div>
-                <div className="text-[11px] text-[#5B1423] font-medium">
-                  Products in Catalog: {products.filter(p => p.sellerId === sellerToDelete.id).length}
-                </div>
-              </div>
-
-              <p className="text-[#5C4449] leading-relaxed">
-                Removing this seller will revoke their merchant credentials and remove their storefront from ProductGenius.
+              <p className="text-[#5C4449]">
+                Are you sure you want to remove seller "{sellerToDelete.storeName || sellerToDelete.name}"?
               </p>
-
-              {/* Option to also purge seller's products */}
-              <label className="flex items-start gap-2.5 p-3 bg-[#FCECE9] rounded-xl border border-[#F2CAC2] cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={removeSellerProducts}
-                  onChange={e => setRemoveSellerProducts(e.target.checked)}
-                  className="mt-0.5 accent-[#5B1423] cursor-pointer"
-                />
-                <span className="text-[11px] text-[#5B1423] font-medium leading-snug">
-                  Also delete all {products.filter(p => p.sellerId === sellerToDelete.id).length} products listed by this seller from the catalog
-                </span>
-              </label>
 
               <div className="pt-2 flex justify-end gap-3">
                 <button
@@ -1312,7 +1309,54 @@ export const AdminDashboard: React.FC = () => {
                   onClick={handleConfirmDeleteSeller}
                   className="px-4 py-2 bg-rose-700 hover:bg-rose-800 text-white font-semibold uppercase tracking-wider rounded-lg shadow-sm cursor-pointer"
                 >
-                  Confirm Remove Seller
+                  Confirm Remove
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CONFIRM DELETE CAMPAIGN MODAL */}
+      {campaignToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-[#FAF7F2] w-full max-w-md rounded-2xl shadow-2xl border border-[#E8DDD8] overflow-hidden">
+            <div className="bg-rose-900 text-white p-5 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-rose-300" />
+                <h3 className="font-display text-lg font-semibold">Delete Campaign</h3>
+              </div>
+              <button
+                onClick={() => setCampaignToDelete(null)}
+                className="text-white/80 hover:text-white cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 text-xs">
+              <p className="text-[#5C4449]">
+                Are you sure you want to remove the campaign "{campaignToDelete.title}"? The promo code <strong>{campaignToDelete.discountCode}</strong> will no longer be active.
+              </p>
+
+              <div className="pt-2 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setCampaignToDelete(null)}
+                  className="px-4 py-2 bg-white hover:bg-[#FAF7F2] text-[#5C4449] border border-[#E8DDD8] rounded-lg font-medium cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    deleteCampaign(campaignToDelete.id);
+                    setCampaignToDelete(null);
+                    showToast('Campaign successfully removed.');
+                  }}
+                  className="px-4 py-2 bg-rose-700 hover:bg-rose-800 text-white font-semibold uppercase tracking-wider rounded-lg shadow-sm cursor-pointer"
+                >
+                  Delete Campaign
                 </button>
               </div>
             </div>
@@ -1328,6 +1372,17 @@ export const AdminDashboard: React.FC = () => {
           setProductToEdit(null);
         }}
         productToEdit={productToEdit}
+      />
+
+      {/* Campaign Manager Modal */}
+      <CampaignManagerModal
+        isOpen={isCampaignModalOpen}
+        onClose={() => {
+          setIsCampaignModalOpen(false);
+          setCampaignToEdit(null);
+        }}
+        campaignToEdit={campaignToEdit}
+        onSave={handleSaveCampaign}
       />
 
     </div>

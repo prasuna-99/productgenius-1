@@ -12,6 +12,8 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Product } from '../../types';
+import { formatPrice } from '../../utils/format';
+import { ImageWithFallback } from '../common/ImageWithFallback';
 
 export const GeniusRecommendationsView: React.FC = () => {
   const {
@@ -20,6 +22,7 @@ export const GeniusRecommendationsView: React.FC = () => {
     frequentItemsets,
     transactions,
     addToCart,
+    instantOrder,
     setActiveMathModalRule,
     setSelectedProductDetail,
     minSupport,
@@ -30,7 +33,7 @@ export const GeniusRecommendationsView: React.FC = () => {
 
   // Selected seed item for interactive Apriori basket pairing simulator
   const [selectedSeedProductId, setSelectedSeedProductId] = useState<string>(
-    products[0]?.id || 'pg-101'
+    products[0]?.id || 'pg-skn-01'
   );
 
   // Mined rules where antecedent contains the selected seed product
@@ -50,6 +53,11 @@ export const GeniusRecommendationsView: React.FC = () => {
     addToCart(p2, 1);
   };
 
+  const handleOrderBundle = (p1: Product, p2: Product) => {
+    addToCart(p1, 1);
+    instantOrder(p2, 1);
+  };
+
   return (
     <div className="space-y-12 pb-16">
       
@@ -66,7 +74,7 @@ export const GeniusRecommendationsView: React.FC = () => {
           </h1>
 
           <p className="text-sm text-[#E8DDD8] leading-relaxed">
-            Unlike arbitrary black-box algorithms, ProductGenius evaluates thousands of customer checkout baskets using the <strong>Apriori Algorithm</strong>. We identify items with the highest rates of <strong>Support</strong> (transaction frequency) and <strong>Confidence</strong> (conditional purchase likelihood).
+            ProductGenius analyzes <strong>200 verified customer checkout transactions</strong> across Skincare, Makeup, Bodycare, and Fragrance using the <strong>Apriori Algorithm</strong>. We identify items with the highest rates of <strong>Support</strong> (transaction frequency) and <strong>Confidence</strong> (conditional purchase likelihood).
           </p>
 
           <div className="pt-2 flex flex-wrap items-center gap-4 text-xs font-mono text-[#F2CAC2]">
@@ -76,7 +84,7 @@ export const GeniusRecommendationsView: React.FC = () => {
             <span>·</span>
             <span>Mined Rules: <strong>{associationRules.length}</strong></span>
             <span>·</span>
-            <span>Thresholds: min_sup {(minSupport * 100).toFixed(0)}% / min_conf {(minConfidence * 100).toFixed(0)}%</span>
+            <span>min_sup: {(minSupport * 100).toFixed(0)}% / min_conf: {(minConfidence * 100).toFixed(0)}%</span>
           </div>
         </div>
 
@@ -96,7 +104,7 @@ export const GeniusRecommendationsView: React.FC = () => {
             </h2>
           </div>
           <p className="text-xs text-[#5C4449] max-w-md">
-            Mined co-purchase patterns with statistically significant positive lift (&gt; 1.0), indicating genuine customer preference affinity.
+            Mined co-purchase patterns with statistically significant positive lift (&gt; 1.0), indicating genuine customer preference affinity across 200 orders.
           </p>
         </div>
 
@@ -109,7 +117,7 @@ export const GeniusRecommendationsView: React.FC = () => {
             const confPct = Math.round(rule.confidence * 100);
             const supPct = Math.round(rule.support * 100);
             const bundlePrice = antecedentProduct.price + consequentProduct.price;
-            const discountedBundle = bundlePrice * 0.9; // 10% bundle discount
+            const discountedBundle = Math.round(bundlePrice * 0.9); // 10% bundle discount
 
             return (
               <div
@@ -142,11 +150,10 @@ export const GeniusRecommendationsView: React.FC = () => {
                       className="cursor-pointer group text-center"
                     >
                       <div className="rounded-lg overflow-hidden border border-[#E8DDD8] bg-[#FAF7F2] aspect-square mb-2">
-                        <img
+                        <ImageWithFallback
                           src={antecedentProduct.imageUrl}
                           alt={antecedentProduct.title}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                          referrerPolicy="no-referrer"
+                          className="w-full h-full group-hover:scale-105 transition-transform"
                         />
                       </div>
                       <span className="text-[10px] text-[#7A5B61] uppercase tracking-wider block">
@@ -156,7 +163,7 @@ export const GeniusRecommendationsView: React.FC = () => {
                         {antecedentProduct.title}
                       </h4>
                       <div className="text-xs font-mono font-bold text-[#5B1423]">
-                        ${antecedentProduct.price.toFixed(2)}
+                        {formatPrice(antecedentProduct.price)}
                       </div>
                     </div>
 
@@ -166,11 +173,10 @@ export const GeniusRecommendationsView: React.FC = () => {
                       className="cursor-pointer group text-center"
                     >
                       <div className="rounded-lg overflow-hidden border border-[#F2CAC2] bg-[#FCECE9]/30 aspect-square mb-2">
-                        <img
+                        <ImageWithFallback
                           src={consequentProduct.imageUrl}
                           alt={consequentProduct.title}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                          referrerPolicy="no-referrer"
+                          className="w-full h-full group-hover:scale-105 transition-transform"
                         />
                       </div>
                       <span className="text-[10px] text-[#5B1423] font-semibold uppercase tracking-wider block">
@@ -180,7 +186,7 @@ export const GeniusRecommendationsView: React.FC = () => {
                         {consequentProduct.title}
                       </h4>
                       <div className="text-xs font-mono font-bold text-[#5B1423]">
-                        ${consequentProduct.price.toFixed(2)}
+                        {formatPrice(consequentProduct.price)}
                       </div>
                     </div>
                   </div>
@@ -193,13 +199,22 @@ export const GeniusRecommendationsView: React.FC = () => {
 
                 {/* Bottom Actions */}
                 <div className="mt-4 pt-3 border-t border-[#F5EBE6] space-y-2">
-                  <button
-                    onClick={() => handleAddBundle(antecedentProduct, consequentProduct)}
-                    className="w-full py-2 px-3 bg-[#5B1423] hover:bg-[#7A1C30] text-white text-xs font-semibold uppercase tracking-wider rounded-lg shadow-sm transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
-                  >
-                    <ShoppingBag className="w-3.5 h-3.5" />
-                    <span>Bundle Both (${discountedBundle.toFixed(2)})</span>
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleAddBundle(antecedentProduct, consequentProduct)}
+                      className="flex-1 py-2 px-2.5 bg-white hover:bg-[#FAF7F2] text-[#5B1423] border border-[#E8DDD8] text-xs font-semibold rounded-lg shadow-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <ShoppingBag className="w-3.5 h-3.5" />
+                      <span>Add Pair</span>
+                    </button>
+                    <button
+                      onClick={() => handleOrderBundle(antecedentProduct, consequentProduct)}
+                      className="flex-1 py-2 px-2.5 bg-[#5B1423] hover:bg-[#7A1C30] text-white text-xs font-semibold uppercase tracking-wider rounded-lg shadow-sm transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-[#F2CAC2]" />
+                      <span>Order ({formatPrice(discountedBundle)})</span>
+                    </button>
+                  </div>
 
                   <button
                     onClick={() => setActiveMathModalRule(rule)}
@@ -245,15 +260,14 @@ export const GeniusRecommendationsView: React.FC = () => {
                     : 'border-[#E8DDD8] bg-[#FAF7F2] hover:border-[#7A1C30]'
                 }`}
               >
-                <img
+                <ImageWithFallback
                   src={p.imageUrl}
                   alt={p.title}
-                  className="w-12 h-12 rounded-lg object-cover border border-[#E8DDD8]"
-                  referrerPolicy="no-referrer"
+                  className="w-12 h-12 rounded-lg border border-[#E8DDD8]"
                 />
                 <div className="min-w-0">
                   <div className="text-xs font-semibold text-[#2D1217] truncate">{p.title}</div>
-                  <div className="text-xs font-mono font-bold text-[#5B1423]">${p.price.toFixed(2)}</div>
+                  <div className="text-xs font-mono font-bold text-[#5B1423]">{formatPrice(p.price)}</div>
                 </div>
               </button>
             ))}
@@ -269,7 +283,7 @@ export const GeniusRecommendationsView: React.FC = () => {
           {matchingSeedRules.length === 0 ? (
             <div className="p-8 text-center bg-[#FAF7F2] rounded-xl border border-dashed border-[#E8DDD8] text-xs text-[#7A5B61]">
               No association rules meet the current threshold of min_conf: {(minConfidence * 100).toFixed(0)}%.
-              Adjust thresholds in the Admin Dashboard or seed new checkout transactions!
+              Adjust thresholds in the Admin Dashboard or inspect other catalog items!
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -286,11 +300,10 @@ export const GeniusRecommendationsView: React.FC = () => {
                     className="p-4 bg-[#FAF7F2] rounded-xl border border-[#E8DDD8] flex flex-col justify-between"
                   >
                     <div className="flex gap-4 items-start">
-                      <img
+                      <ImageWithFallback
                         src={conseqProd.imageUrl}
                         alt={conseqProd.title}
-                        className="w-20 h-20 rounded-lg object-cover border border-[#E8DDD8]"
-                        referrerPolicy="no-referrer"
+                        className="w-20 h-20 rounded-lg border border-[#E8DDD8]"
                       />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
@@ -305,7 +318,7 @@ export const GeniusRecommendationsView: React.FC = () => {
                           {conseqProd.title}
                         </h4>
                         <div className="text-xs font-mono font-bold text-[#5B1423] mt-0.5">
-                          ${conseqProd.price.toFixed(2)}
+                          {formatPrice(conseqProd.price)}
                         </div>
                         <div className="text-[11px] text-[#5C4449] mt-1">
                           Lift: <strong>{rule.lift}x</strong> · Co-purchased in {rule.transactionCount} orders
@@ -313,7 +326,7 @@ export const GeniusRecommendationsView: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="mt-4 pt-3 border-t border-[#E8DDD8] flex items-center justify-between">
+                    <div className="mt-4 pt-3 border-t border-[#E8DDD8] flex items-center justify-between gap-2">
                       <button
                         onClick={() => setActiveMathModalRule(rule)}
                         className="text-xs text-[#7A1C30] hover:underline cursor-pointer flex items-center gap-1"
@@ -321,12 +334,21 @@ export const GeniusRecommendationsView: React.FC = () => {
                         Inspect Proof <ArrowRight className="w-3 h-3" />
                       </button>
 
-                      <button
-                        onClick={() => addToCart(conseqProd, 1)}
-                        className="px-3.5 py-1.5 bg-[#5B1423] hover:bg-[#7A1C30] text-white text-xs font-semibold rounded-lg shadow-sm transition-colors cursor-pointer"
-                      >
-                        + Add Recommendation
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => addToCart(conseqProd, 1)}
+                          className="px-3 py-1.5 bg-white hover:bg-[#FAF7F2] text-[#5B1423] border border-[#E8DDD8] text-xs font-semibold rounded-lg shadow-xs transition-colors cursor-pointer"
+                        >
+                          + Add
+                        </button>
+                        <button
+                          onClick={() => instantOrder(conseqProd, 1)}
+                          className="px-3 py-1.5 bg-[#5B1423] hover:bg-[#7A1C30] text-white text-xs font-semibold uppercase tracking-wider rounded-lg shadow-sm transition-colors cursor-pointer flex items-center gap-1"
+                        >
+                          <Sparkles className="w-3 h-3 text-[#F2CAC2]" />
+                          <span>Order</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );

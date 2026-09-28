@@ -2,7 +2,6 @@ import React, { useState, useMemo } from 'react';
 import {
   Store,
   Package,
-  DollarSign,
   TrendingUp,
   AlertTriangle,
   Plus,
@@ -18,6 +17,8 @@ import {
 import { useApp } from '../../context/AppContext';
 import { Product, Order } from '../../types';
 import { ProductFormModal } from './ProductFormModal';
+import { formatPrice } from '../../utils/format';
+import { ImageWithFallback } from '../common/ImageWithFallback';
 
 export const SellerDashboard: React.FC = () => {
   const {
@@ -37,7 +38,7 @@ export const SellerDashboard: React.FC = () => {
   const [searchFilter, setSearchFilter] = useState('');
 
   // Seller metrics calculations
-  const sellerProducts = products; // in our boutique store context
+  const sellerProducts = products;
   const totalRevenue = orders.reduce((sum, o) => sum + o.total, 0);
   const totalUnitsSold = orders.reduce(
     (sum, o) => sum + o.items.reduce((s, i) => s + i.quantity, 0),
@@ -88,7 +89,7 @@ export const SellerDashboard: React.FC = () => {
               {currentUser.storeName || 'Atelier Bordeaux & Co.'}
             </h1>
             <p className="text-xs text-[#5C4449] mt-0.5">
-              Fulfillment center, live inventory controls & Apriori basket affinity cross-sell mining.
+              Fulfillment center, live inventory in Rupees (Rs) & Apriori basket affinity cross-sell mining.
             </p>
           </div>
         </div>
@@ -105,15 +106,15 @@ export const SellerDashboard: React.FC = () => {
         </button>
       </div>
 
-      {/* KPI Cards */}
+      {/* KPI Cards in Rupees */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="p-5 bg-white rounded-2xl border border-[#E8DDD8] shadow-sm">
           <div className="flex items-center justify-between text-[#7A5B61] mb-2">
             <span className="text-xs font-semibold uppercase tracking-wider">Gross Sales</span>
-            <DollarSign className="w-4 h-4 text-[#5B1423]" />
+            <span className="font-mono text-xs font-bold text-[#5B1423]">Rs</span>
           </div>
           <div className="text-2xl font-bold font-mono text-[#5B1423] tabular-nums">
-            ${totalRevenue.toFixed(2)}
+            {formatPrice(totalRevenue)}
           </div>
           <div className="text-[11px] text-emerald-700 mt-1 flex items-center gap-1 font-medium">
             <TrendingUp className="w-3.5 h-3.5" /> +18.4% from last period
@@ -224,7 +225,7 @@ export const SellerDashboard: React.FC = () => {
                     <th className="py-3 px-4">Item</th>
                     <th className="py-3 px-4">Category</th>
                     <th className="py-3 px-4">SKU</th>
-                    <th className="py-3 px-4">Price</th>
+                    <th className="py-3 px-4">Price (Rs)</th>
                     <th className="py-3 px-4">Stock Count</th>
                     <th className="py-3 px-4">Availability</th>
                     <th className="py-3 px-4 text-right">Actions</th>
@@ -235,11 +236,10 @@ export const SellerDashboard: React.FC = () => {
                     <tr key={p.id} className="hover:bg-[#FAF7F2]/50 transition-colors">
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-3">
-                          <img
+                          <ImageWithFallback
                             src={p.imageUrl}
                             alt={p.title}
-                            className="w-10 h-10 rounded-lg object-cover border border-[#E8DDD8]"
-                            referrerPolicy="no-referrer"
+                            className="w-10 h-10 rounded-lg border border-[#E8DDD8]"
                           />
                           <div>
                             <div className="font-semibold text-[#2D1217] max-w-[200px] truncate">{p.title}</div>
@@ -248,9 +248,9 @@ export const SellerDashboard: React.FC = () => {
                         </div>
                       </td>
 
-                      <td className="py-3 px-4 text-[#5C4449]">{p.category}</td>
+                      <td className="py-3 px-4 text-[#5C4449] font-semibold">{p.category}</td>
                       <td className="py-3 px-4 font-mono text-[#5C4449]">{p.sku}</td>
-                      <td className="py-3 px-4 font-mono font-bold text-[#5B1423]">${p.price.toFixed(2)}</td>
+                      <td className="py-3 px-4 font-mono font-bold text-[#5B1423]">{formatPrice(p.price)}</td>
 
                       <td className="py-3 px-4 font-mono">
                         <span className={p.stockCount <= 5 ? 'text-amber-700 font-bold' : 'text-[#2D1217]'}>
@@ -313,7 +313,7 @@ export const SellerDashboard: React.FC = () => {
                     <th className="py-3 px-4">Date</th>
                     <th className="py-3 px-4">Customer</th>
                     <th className="py-3 px-4">Items</th>
-                    <th className="py-3 px-4">Total</th>
+                    <th className="py-3 px-4">Total (Rs)</th>
                     <th className="py-3 px-4">Shipping Destination</th>
                     <th className="py-3 px-4">Fulfillment Status</th>
                   </tr>
@@ -331,7 +331,7 @@ export const SellerDashboard: React.FC = () => {
                         {order.items.map(i => `${i.quantity}x ${i.title.split(' ')[0]}`).join(', ')}
                       </td>
                       <td className="py-3 px-4 font-mono font-bold text-[#2D1217]">
-                        ${order.total.toFixed(2)}
+                        {formatPrice(order.total)}
                       </td>
                       <td className="py-3 px-4 text-[#5C4449]">
                         {order.shippingAddress.city}, {order.shippingAddress.state}
@@ -369,7 +369,7 @@ export const SellerDashboard: React.FC = () => {
               </h3>
             </div>
             <p className="text-xs text-[#5C4449] leading-relaxed max-w-3xl">
-              Using the Apriori algorithm on customer transactions, these product associations reflect high support and confidence. Sellers can use these insights to launch curated gift bundles, cross-merchandise complementary pieces, and maximize average order value (AOV).
+              Using the Apriori algorithm on 200 customer transactions, these product associations reflect high support and confidence. Sellers can use these insights to launch curated gift bundles, cross-merchandise complementary pieces, and maximize average order value in Rupees.
             </p>
           </div>
 
@@ -395,7 +395,7 @@ export const SellerDashboard: React.FC = () => {
                   <div className="flex-1 text-center p-2 rounded-lg bg-[#FAF7F2]">
                     <div className="text-[10px] text-[#7A5B61] uppercase font-semibold">Primary Product</div>
                     <div className="text-xs font-semibold text-[#2D1217] truncate mt-1">{antecedent?.title}</div>
-                    <div className="text-xs font-mono font-bold text-[#5B1423]">${antecedent?.price.toFixed(2)}</div>
+                    <div className="text-xs font-mono font-bold text-[#5B1423]">{formatPrice(antecedent?.price)}</div>
                   </div>
 
                   <ArrowRight className="w-5 h-5 text-[#5B1423] shrink-0" />
@@ -403,7 +403,7 @@ export const SellerDashboard: React.FC = () => {
                   <div className="flex-1 text-center p-2 rounded-lg bg-[#FCECE9]">
                     <div className="text-[10px] text-[#5B1423] uppercase font-semibold">Associated Co-Purchase</div>
                     <div className="text-xs font-semibold text-[#2D1217] truncate mt-1">{consequent?.title}</div>
-                    <div className="text-xs font-mono font-bold text-[#5B1423]">${consequent?.price.toFixed(2)}</div>
+                    <div className="text-xs font-mono font-bold text-[#5B1423]">{formatPrice(consequent?.price)}</div>
                   </div>
                 </div>
 
