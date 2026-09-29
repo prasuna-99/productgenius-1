@@ -155,7 +155,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   // Product Catalog: check if saved products adhere to the new 4 categories (Skincare, Makeup, Bodycare, Fragrance)
   const [products, setProducts] = useState<Product[]>(() => {
-    const saved = safeStorage.getItem('pg_products_v2');
+    const saved = safeStorage.getItem('pg_products_v3');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -189,7 +189,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   // Cart
   const [cart, setCart] = useState<CartItem[]>(() => {
-    const saved = safeStorage.getItem('pg_cart_v2');
+    const saved = safeStorage.getItem('pg_cart_v3');
     if (saved) {
       try {
         return JSON.parse(saved);
@@ -200,18 +200,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   // Wishlist
   const [wishlist, setWishlist] = useState<string[]>(() => {
-    const saved = safeStorage.getItem('pg_wishlist_v2');
+    const saved = safeStorage.getItem('pg_wishlist_v3');
     if (saved) {
       try {
         return JSON.parse(saved);
       } catch (e) {}
     }
-    return ['pg-skn-02', 'pg-mak-11', 'pg-frg-38'];
+    return ['pg-skn-04', 'pg-mak-09', 'pg-frg-19'];
   });
 
   // Orders
   const [orders, setOrders] = useState<Order[]>(() => {
-    const saved = safeStorage.getItem('pg_orders_v2');
+    const saved = safeStorage.getItem('pg_orders_v3');
     if (saved) {
       try {
         return JSON.parse(saved);
@@ -222,7 +222,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   // Transactions & Raw Rows from 200 clean dataset
   const [transactions, setTransactions] = useState<Transaction[]>(() => {
-    const saved = safeStorage.getItem('pg_transactions_v2');
+    const saved = safeStorage.getItem('pg_transactions_v3');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -233,7 +233,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   });
 
   const [rawDatasetRows, setRawDatasetRows] = useState<RawDatasetRow[]>(() => {
-    const saved = safeStorage.getItem('pg_raw_dataset_rows_v2');
+    const saved = safeStorage.getItem('pg_raw_dataset_rows_v3');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -269,7 +269,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [allUsers]);
 
   useEffect(() => {
-    safeStorage.setItem('pg_products_v2', JSON.stringify(products));
+    safeStorage.setItem('pg_products_v3', JSON.stringify(products));
   }, [products]);
 
   useEffect(() => {
@@ -277,23 +277,23 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [campaigns]);
 
   useEffect(() => {
-    safeStorage.setItem('pg_cart_v2', JSON.stringify(cart));
+    safeStorage.setItem('pg_cart_v3', JSON.stringify(cart));
   }, [cart]);
 
   useEffect(() => {
-    safeStorage.setItem('pg_wishlist_v2', JSON.stringify(wishlist));
+    safeStorage.setItem('pg_wishlist_v3', JSON.stringify(wishlist));
   }, [wishlist]);
 
   useEffect(() => {
-    safeStorage.setItem('pg_orders_v2', JSON.stringify(orders));
+    safeStorage.setItem('pg_orders_v3', JSON.stringify(orders));
   }, [orders]);
 
   useEffect(() => {
-    safeStorage.setItem('pg_transactions_v2', JSON.stringify(transactions));
+    safeStorage.setItem('pg_transactions_v3', JSON.stringify(transactions));
   }, [transactions]);
 
   useEffect(() => {
-    safeStorage.setItem('pg_raw_dataset_rows_v2', JSON.stringify(rawDatasetRows));
+    safeStorage.setItem('pg_raw_dataset_rows_v3', JSON.stringify(rawDatasetRows));
   }, [rawDatasetRows]);
 
   // Role switching
@@ -522,9 +522,25 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     setOrders(prev => {
       const updated = prev.map(o => (o.id === orderId ? { ...o, status } : o));
-      safeStorage.setItem('pg_orders_v2', JSON.stringify(updated));
+      safeStorage.setItem('pg_orders_v3', JSON.stringify(updated));
       return updated;
     });
+
+    // Decrement stock when order is marked as Delivered
+    if (status === 'Delivered' && target && target.items.length > 0) {
+      setProducts(prev => {
+        const updated = prev.map(p => {
+          const orderItem = target.items.find(i => i.productId === p.id);
+          if (orderItem) {
+            const newStock = Math.max(0, p.stockCount - orderItem.quantity);
+            return { ...p, stockCount: newStock, inStock: newStock > 0 };
+          }
+          return p;
+        });
+        safeStorage.setItem('pg_products_v3', JSON.stringify(updated));
+        return updated;
+      });
+    }
 
     // Ingest into Apriori transactions if transitioned to 'Delivered'
     if (status === 'Delivered' && target && target.items.length > 0) {
@@ -541,7 +557,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
         const updatedTxList = [newTx, ...transactions];
         setTransactions(updatedTxList);
-        safeStorage.setItem('pg_transactions_v2', JSON.stringify(updatedTxList));
+        safeStorage.setItem('pg_transactions_v3', JSON.stringify(updatedTxList));
 
         const newRawRow: RawDatasetRow = {
           transaction_id: `T-${orderId}`,
@@ -554,10 +570,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
         const updatedRows = [newRawRow, ...rawDatasetRows];
         setRawDatasetRows(updatedRows);
-        safeStorage.setItem('pg_raw_dataset_rows_v2', JSON.stringify(updatedRows));
+        safeStorage.setItem('pg_raw_dataset_rows_v3', JSON.stringify(updatedRows));
 
         setDeliveryNotification(
-          `Order ${orderId} delivered! Ingested ${purchasedProductIds.length} items into the Apriori Database.`
+          `Order ${orderId} delivered! Stock updated & ${purchasedProductIds.length} items ingested into Apriori Database.`
         );
 
         setMiningTick(prev => prev + 1);

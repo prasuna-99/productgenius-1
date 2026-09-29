@@ -9,6 +9,8 @@ import {
   ShoppingBag,
   HelpCircle,
   Sliders,
+  Calculator,
+  BarChart2,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Product } from '../../types';
@@ -35,6 +37,7 @@ export const GeniusRecommendationsView: React.FC = () => {
   const [selectedSeedProductId, setSelectedSeedProductId] = useState<string>(
     products[0]?.id || 'pg-skn-01'
   );
+  const [expandedProofIds, setExpandedProofIds] = useState<Set<string>>(new Set());
 
   // Mined rules where antecedent contains the selected seed product
   const matchingSeedRules = associationRules.filter(r =>
@@ -56,6 +59,61 @@ export const GeniusRecommendationsView: React.FC = () => {
   const handleOrderBundle = (p1: Product, p2: Product) => {
     addToCart(p1, 1);
     instantOrder(p2, 1);
+  };
+
+  const toggleProof = (ruleId: string) => {
+    setExpandedProofIds(prev => {
+      const next = new Set(prev);
+      if (next.has(ruleId)) next.delete(ruleId);
+      else next.add(ruleId);
+      return next;
+    });
+  };
+
+  // Helper to render mining proof breakdown
+  const renderMiningProof = (rule: any, antecedentProd: Product, consequentProd: Product) => {
+    const totalN = transactions.length;
+    const bothCount = rule.transactionCount;
+    const antCount = rule.antecedentCount;
+    const supportPct = (rule.support * 100).toFixed(2);
+    const confidencePct = (rule.confidence * 100).toFixed(2);
+    const liftVal = rule.lift.toFixed(2);
+    const consequentSupport = consequentProd ? (frequentItemsets.find(f => f.items.length === 1 && f.items[0] === rule.consequent[0])?.support || 0) : 0;
+    const consSupportPct = (consequentSupport * 100).toFixed(2);
+
+    return (
+      <div className="bg-white p-4 rounded-xl border border-[#E8DDD8] space-y-3">
+        <div className="flex items-center gap-2 text-xs font-semibold text-[#5B1423]">
+          <Calculator className="w-3.5 h-3.5" />
+          <span>Apriori Mining Proof (Verified from {totalN} Transactions)</span>
+        </div>
+        <div className="space-y-2 font-mono text-[11px] bg-[#FAF7F2] p-3 rounded-lg border border-[#E8DDD8]">
+          <div className="flex justify-between text-[#2D1217]">
+            <span>Total Transactions (N):</span>
+            <strong className="text-[#5B1423]">{totalN}</strong>
+          </div>
+          <div className="pt-2 border-t border-[#E8DDD8]">
+            <strong className="text-[#5B1423]">1. Support(A ∪ B):</strong>
+            <div className="text-[#7A5B61] mt-0.5">Count(A ∪ B) / N = {bothCount} / {totalN} = {rule.support.toFixed(4)} ({supportPct}%)</div>
+          </div>
+          <div className="pt-2 border-t border-[#E8DDD8]">
+            <strong className="text-[#5B1423]">2. Confidence(A ⇒ B):</strong>
+            <div className="text-[#7A5B61] mt-0.5">Count(A ∪ B) / Count(A) = {bothCount} / {antCount} = {rule.confidence.toFixed(4)} ({confidencePct}%)</div>
+          </div>
+          <div className="pt-2 border-t border-[#E8DDD8]">
+            <strong className="text-[#5B1423]">3. Lift(A ⇒ B):</strong>
+            <div className="text-[#7A5B61] mt-0.5">Confidence / Support(B) = {rule.confidence.toFixed(4)} / {consequentSupport.toFixed(4)} = {liftVal}x</div>
+          </div>
+        </div>
+        <p className="text-[11px] text-[#5C4449] leading-snug">
+          <strong>Interpretation: </strong>{rule.lift > 1.2 
+            ? `Strong positive association — B is ${liftVal}x more likely to be purchased with A than by chance.` 
+            : rule.lift > 1.0 
+            ? `Mild positive association — B is ${liftVal}x more likely with A.` 
+            : 'No significant association (independent purchases).'}
+        </p>
+      </div>
+    );
   };
 
   return (
@@ -195,6 +253,28 @@ export const GeniusRecommendationsView: React.FC = () => {
                   <p className="text-xs text-[#5C4449] bg-[#FAF7F2] p-2.5 rounded-lg border border-[#E8DDD8] leading-snug">
                     <strong>Rule Math:</strong> {confPct}% of customers who ordered {antecedentProduct.title.split(' ')[0]} also ordered {consequentProduct.title.split(' ')[0]} (Lift: {rule.lift}x).
                   </p>
+
+                  {/* Expandable Mining Proof */}
+                  <button
+                    onClick={() => toggleProof(rule.id)}
+                    className="w-full mt-3 text-left text-xs text-[#7A1C30] hover:underline flex items-center justify-center gap-1 cursor-pointer"
+                  >
+                    {expandedProofIds.has(rule.id) ? (
+                      <>
+                        <BarChart2 className="w-3.5 h-3.5" /> Hide Mining Proof
+                      </>
+                    ) : (
+                      <>
+                        <BarChart2 className="w-3.5 h-3.5" /> Show Mining Proof & Calculation
+                      </>
+                    )}
+                  </button>
+
+                  {expandedProofIds.has(rule.id) && (
+                    <div className="mt-3 animate-in fade-in duration-200">
+                      {renderMiningProof(rule, antecedentProduct, consequentProduct)}
+                    </div>
+                  )}
                 </div>
 
                 {/* Bottom Actions */}
@@ -326,6 +406,28 @@ export const GeniusRecommendationsView: React.FC = () => {
                       </div>
                     </div>
 
+                    {/* Expandable Mining Proof for Simulator */}
+                    <button
+                      onClick={() => toggleProof('sim-' + rule.id)}
+                      className="w-full mt-3 text-left text-xs text-[#7A1C30] hover:underline flex items-center justify-center gap-1 cursor-pointer"
+                    >
+                      {expandedProofIds.has('sim-' + rule.id) ? (
+                        <>
+                          <BarChart2 className="w-3.5 h-3.5" /> Hide Mining Proof
+                        </>
+                      ) : (
+                        <>
+                          <BarChart2 className="w-3.5 h-3.5" /> Show Mining Proof & Calculation
+                        </>
+                      )}
+                    </button>
+
+                    {expandedProofIds.has('sim-' + rule.id) && (
+                      <div className="mt-3 animate-in fade-in duration-200">
+                        {renderMiningProof(rule, selectedSeedProduct!, conseqProd)}
+                      </div>
+                    )}
+
                     <div className="mt-4 pt-3 border-t border-[#E8DDD8] flex items-center justify-between gap-2">
                       <button
                         onClick={() => setActiveMathModalRule(rule)}
@@ -357,6 +459,139 @@ export const GeniusRecommendationsView: React.FC = () => {
           )}
         </div>
 
+      </div>
+
+      {/* Feature 3: Dataset Mining Summary - Transparent Proof */}
+      <div className="bg-white rounded-2xl border border-[#E8DDD8] p-6 shadow-sm space-y-6">
+        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-[#5B1423] mb-2">
+          <BarChart2 className="w-3.5 h-3.5" /> Dataset Mining Transparency Report
+        </div>
+        <h3 className="font-display text-xl font-semibold text-[#2D1217]">
+          Complete Apriori Mining Summary from Your Dataset
+        </h3>
+        <p className="text-xs text-[#5C4449] leading-relaxed">
+          All calculations below are derived in real-time from the {transactions.length} verified customer transactions in your dataset. 
+          When the dataset is updated (new orders delivered, admin imports new data), the engine automatically re-mines and updates these metrics.
+        </p>
+
+        {/* Overall Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-[#FAF7F2] rounded-xl border border-[#E8DDD8]">
+          <div className="text-center">
+            <div className="text-2xl font-bold font-mono text-[#5B1423]">{transactions.length}</div>
+            <div className="text-[10px] text-[#7A5B61] uppercase tracking-wider">Total Transactions</div>
+          </div>
+          <div className="text-center">
+            <div className="text-2xl font-bold font-mono text-[#5B1423]">{frequentItemsets.length}</div>
+            <div className="text-[10px] text-[#7A5B61] uppercase tracking-wider">Frequent Itemsets</div>
+          </div>
+          <div className="text-center">
+            <div className="text-2xl font-bold font-mono text-[#5B1423]">{associationRules.length}</div>
+            <div className="text-[10px] text-[#7A5B61] uppercase tracking-wider">Association Rules</div>
+          </div>
+          <div className="text-center">
+            <div className="text-2xl font-bold font-mono text-[#5B1423]">{(minSupport * 100).toFixed(0)}% / {(minConfidence * 100).toFixed(0)}%</div>
+            <div className="text-[10px] text-[#7A5B61] uppercase tracking-wider">min_sup / min_conf</div>
+          </div>
+        </div>
+
+        {/* Top Frequent Itemsets */}
+        <div className="space-y-3">
+          <h4 className="font-semibold text-sm text-[#2D1217] flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-[#5B1423]" />
+            Top Frequent Itemsets (by Support)
+          </h4>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-[#FAF7F2] border-b border-[#E8DDD8] text-[#7A5B61] uppercase tracking-wider font-semibold">
+                <tr>
+                  <th className="py-2 px-3">Itemset</th>
+                  <th className="py-2 px-3 font-mono">Support Count</th>
+                  <th className="py-2 px-3 font-mono">Support %</th>
+                  <th className="py-2 px-3">Type</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#F5EBE6]">
+                {frequentItemsets
+                  .filter(f => f.items.length >= 1)
+                  .sort((a, b) => b.support - a.support)
+                  .slice(0, 10)
+                  .map((fi, idx) => {
+                    const itemTitles = fi.items.map(id => productMap.get(id)?.title || id).join(' + ');
+                    return (
+                      <tr key={fi.items.join('-')} className="hover:bg-[#FAF7F2]/50">
+                        <td className="py-2 px-3 font-medium text-[#2D1217] max-w-xs truncate">{itemTitles}</td>
+                        <td className="py-2 px-3 font-mono text-[#5B1423]">{fi.supportCount}</td>
+                        <td className="py-2 px-3 font-mono text-[#5B1423]">{(fi.support * 100).toFixed(2)}%</td>
+                        <td className="py-2 px-3">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
+                            fi.items.length === 1 ? 'bg-blue-100 text-blue-800' :
+                            fi.items.length === 2 ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
+                          }`}>
+                            {fi.items.length}-itemset
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Top Association Rules */}
+        <div className="space-y-3 pt-4 border-t border-[#E8DDD8]">
+          <h4 className="font-semibold text-sm text-[#2D1217] flex items-center gap-2">
+            <ArrowRight className="w-4 h-4 text-[#5B1423]" />
+            Top Association Rules (by Confidence × Support)
+          </h4>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-[#FAF7F2] border-b border-[#E8DDD8] text-[#7A5B61] uppercase tracking-wider font-semibold">
+                <tr>
+                  <th className="py-2 px-3">Rule (A ⇒ B)</th>
+                  <th className="py-2 px-3 font-mono">Support</th>
+                  <th className="py-2 px-3 font-mono">Confidence</th>
+                  <th className="py-2 px-3 font-mono">Lift</th>
+                  <th className="py-2 px-3 font-mono">Tx Count</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#F5EBE6]">
+                {[...associationRules]
+                  .sort((a, b) => (b.confidence * b.support) - (a.confidence * a.support))
+                  .slice(0, 10)
+                  .map((rule, idx) => {
+                    const ante = rule.antecedent.map(id => productMap.get(id)?.title.split(' ')[0] || id).join(' + ');
+                    const cons = rule.consequent.map(id => productMap.get(id)?.title.split(' ')[0] || id).join(' + ');
+                    return (
+                      <tr key={rule.id} className="hover:bg-[#FAF7F2]/50">
+                        <td className="py-2 px-3 font-medium text-[#2D1217]">
+                          <span className="text-[#5C4449]">{ante}</span> ⇒ <span className="text-[#5B1423] font-bold">{cons}</span>
+                        </td>
+                        <td className="py-2 px-3 font-mono text-[#5B1423]">{(rule.support * 100).toFixed(2)}%</td>
+                        <td className="py-2 px-3 font-mono font-bold text-[#5B1423]">{(rule.confidence * 100).toFixed(2)}%</td>
+                        <td className="py-2 px-3 font-mono">
+                          <span className={rule.lift > 1 ? 'text-emerald-700 font-bold' : ''}>{rule.lift.toFixed(2)}x</span>
+                        </td>
+                        <td className="py-2 px-3 font-mono text-[#5B1423]">{rule.transactionCount}</td>
+                      </tr>
+                    );
+                  })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Note about dynamic updates */}
+        <div className="p-4 bg-[#FCECE9] rounded-xl border border-[#F2CAC2] flex items-start gap-3">
+          <HelpCircle className="w-5 h-5 text-[#5B1423] shrink-0 mt-0.5" />
+          <div className="text-xs text-[#5C4449] leading-relaxed">
+            <strong className="text-[#5B1423]">Dynamic Updates:</strong> When an order is marked "Delivered" by the seller, 
+            the purchased items are automatically ingested as a new transaction into the Apriori database. 
+            Admin can also import new dataset records via the Admin Dashboard. 
+            The engine re-mines automatically (controlled by <code className="font-mono bg-white px-1 rounded">miningTick</code>) 
+            to produce updated support, confidence, and lift values reflecting the latest customer behavior.
+          </div>
+        </div>
       </div>
 
     </div>
